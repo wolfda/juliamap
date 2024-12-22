@@ -1,0 +1,36 @@
+<html>
+    mAndelbRoT sET
+    <canvas id="mandelbrot" width="800" height="800"></canvas>>
+    <script>
+        let canvas = document.getElementById("mandelbrot");
+        let ctx = canvas.getContext("2d");
+            ctx.beginPath();
+            ctx.rect(20, 20, 150, 100)
+            ctx.stroke();
+        for (let i=0; i<10; i=i+1){
+            console.log("i"+i);
+        }
+        let cr = -2;
+        let ci = 0;
+
+            for(let cr = -2; cr < 2; cr = cr + 4 / 800){
+                for(let ci = -2; ci < 2; ci = ci + 4 / 800){
+                    let xr = 0;
+                    let xi = 0;
+
+                    for(let i=0; i<1000; i=i+1) {
+                     let newxr = xr * xr - xi * xi + cr;
+                     let newxi = 2 * xr * xi + ci;
+                        xr = newxr
+                        xi = newxi  
+                    }  
+                    if (xr * xi * xi < 1000){
+                        ctx.fillStyle = "black";
+                        ctx.fillRect((cr + 2) * 200, (ci + 2) * 200, 1, 1);
+                    }
+                }
+            }
+
+       
+    </script>
+<html>
