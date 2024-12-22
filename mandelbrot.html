@@ -3,8 +3,7 @@
     <canvas id="mandelbrot" width="800" height="800"></canvas>>
     <script>
         let canvas = document.getElementById("mandelbrot");
-        let cr = -2;
-        let ci = 0;
+        let ctx = canvas.getContext("2d");
 
         for(let cr = -2; cr < 2; cr = cr + 4 / 800){
             for(let ci = -2; ci < 2; ci = ci + 4 / 800){
@@ -22,6 +21,6 @@
                     ctx.fillRect((cr + 2) * 200, (ci + 2) * 200, 1, 1);
                 }
             }
-        }       
+        }
     </script>
 <html>
