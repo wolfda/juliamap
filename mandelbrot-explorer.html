@@ -167,7 +167,7 @@
     canvas.addEventListener('mouseup', () => {
       isDragging = false;
       // Once the user finishes panning, do a final tile render
-      drawFinalFractal(false);
+      delayDrawFinalFractal(false, 0);
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -250,7 +250,6 @@
     }, { passive: false });
 
     // Smooth zoom animation variables
-    let animStartTime = 0;
     const animDuration = 300; // 300ms
     let animInProgress = false;
 
@@ -263,22 +262,14 @@
       oldCenterY = currentCenterY;
       oldScale   = currentScale;
 
-      // Mark animation start
-      animStartTime = performance.now();
-      if (!animInProgress) {
-        animInProgress = true;
-        requestAnimationFrame(animateZoomFrame);
-      }
+      animateZoomFrame()
     }
 
-    function animateZoomFrame(timestamp) {
-      const elapsed = timestamp - animStartTime;
-      const t = Math.min(1, elapsed / animDuration); // [0..1]
-
+    function animateZoomFrame() {
       // Interpolate current from old -> new
-      currentCenterX = oldCenterX + t * (newCenterX - oldCenterX);
-      currentCenterY = oldCenterY + t * (newCenterY - oldCenterY);
-      currentScale   = oldScale   + t * (newScale   - oldScale);
+      currentCenterX = newCenterX;
+      currentCenterY = newCenterY;
+      currentScale   = newScale;
 
       // Clear main canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -302,16 +293,9 @@
       ctx.drawImage(snapshotCanvas, 0, 0);
       ctx.restore();
 
-      info.textContent = `Zooming... ${Math.round(t*100)}%`;
-
-      if (t < 1) {
-        requestAnimationFrame(animateZoomFrame);
-      } else {
-        // Done
-        animInProgress = false;
-        // Crisp final fractal
-        drawFinalFractal(false);
-      }
+      animInProgress = false;
+      // Crisp final fractal
+      delayDrawFinalFractal(false, 500);
     }
 
     // -------------------------
