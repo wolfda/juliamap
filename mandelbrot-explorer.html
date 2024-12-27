@@ -129,6 +129,9 @@
 
     let timeoutId = null;
 
+    const NUM_WORKERS = navigator.hardwareConcurrency || 4;
+    let workers = [];
+
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -301,43 +304,46 @@
     // -------------------------
     // TILE-BASED FINAL RENDER
     // -------------------------
-    const NUM_WORKERS = navigator.hardwareConcurrency || 4;
-    const workers = [];
     let nextWorkerIndex = 0;
 
-    (function initWorkers() {
+    resetWorkers();
+
+    function resetWorkers() {
       const workerScript = document.getElementById('workerScript').textContent;
       const blob = new Blob([workerScript], {type:'text/javascript'});
       const url = URL.createObjectURL(blob);
+      workers.forEach(worker => worker.terminate());
+      workers = [];
       for (let i=0; i<NUM_WORKERS; i++) {
         workers.push(new Worker(url));
       }
-    })();
-
-    let tilesRemaining = 0;
-    workers.forEach(worker => {
+      nextWorkerIndex = 0;
+      let tilesRemaining = 0;
+      workers.forEach(worker => {
       worker.onmessage = (e) => {
-        const { tileX, tileY, tileWidth, tileHeight, pixels } = e.data;
-        const imageData = new ImageData(pixels, tileWidth, tileHeight);
+          const { tileX, tileY, tileWidth, tileHeight, pixels } = e.data;
+          const imageData = new ImageData(pixels, tileWidth, tileHeight);
 
-        ctx.putImageData(imageData, tileX, tileY);
+          ctx.putImageData(imageData, tileX, tileY);
 
-        tilesRemaining--;
-        if (tilesRemaining === 0) {
-          info.textContent = `Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)}) Scale=${currentScale.toFixed(3)} (Done)`;
-        } else {
-          info.textContent = `Rendering... ${tilesRemaining} left`;
-        }
-      };
-    });
+          tilesRemaining--;
+          if (tilesRemaining === 0) {
+            info.textContent = `Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)}) Scale=${currentScale.toFixed(3)} (Done)`;
+          } else {
+            info.textContent = `Rendering... ${tilesRemaining} left`;
+          }
+        };
+      });
+    }
 
     function delayDrawFinalFractal(forceClear, delayMs) {
       if (timeoutId) {
         clearTimeout(timeoutId);
+        timeoutId = null;
       }
       timeoutId = setTimeout(() => {
+        resetWorkers();
         drawFinalFractal(forceClear);
-        timeoutId = null;
       }, delayMs);
     }
 
@@ -363,6 +369,8 @@
           const tw = Math.min(tileSize, width - tileX);
           const th = Math.min(tileSize, height - tileY);
 
+          const iter = Math.floor(1000 * Math.log2(1 / currentScale));
+
           const msg = {
             tileX, tileY,
             tileWidth: tw,
@@ -372,7 +380,7 @@
             scale:   currentScale,
             canvasWidth: width,
             canvasHeight: height,
-            maxIter
+            maxIter: Math.max(maxIter, iter),
           };
 
           const w = workers[nextWorkerIndex];
