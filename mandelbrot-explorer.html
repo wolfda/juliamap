@@ -1,398 +1,408 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <meta charset="utf-8">
-  <title>Instant Panning & Smooth Zoom Mandelbrot (Fixed Pan Direction)</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden; /* no scrollbars */
-    }
-    #fractalCanvas {
-      display: block;
-      background: #eee;
-      cursor: grab;
-    }
-    #fractalCanvas:active {
-      cursor: grabbing;
-    }
-    #info {
-      position: absolute;
-      top: 5px; left: 5px;
-      background: rgba(255,255,255,0.7);
-      padding: 5px;
-      font-family: sans-serif;
-      pointer-events: none;
-      user-select: none;
-    }
-  </style>
+    <meta charset="utf-8">
+    <title>Instant Panning & Smooth Zoom Mandelbrot (Fixed Pan Direction)</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* no scrollbars */
+        }
+
+        #fractalCanvas {
+            display: block;
+            background: #eee;
+            cursor: grab;
+        }
+
+        #fractalCanvas:active {
+            cursor: grabbing;
+        }
+
+        #info {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 5px;
+            font-family: sans-serif;
+            pointer-events: none;
+            user-select: none;
+        }
+    </style>
 </head>
+
 <body>
-  <canvas id="fractalCanvas"></canvas>
-  <div id="info">Loading...</div>
+    <canvas id="fractalCanvas"></canvas>
+    <div id="info">Loading...</div>
 
-  <!-- Inline worker script for Mandelbrot tile computation -->
-  <script type="text/javascript" id="workerScript">
-    function computeMandelbrotTile(tileX, tileY, tileWidth, tileHeight,
-                                   centerX, centerY, scale,
-                                   canvasWidth, canvasHeight, maxIter) {
-      // Convert the tile's pixel range into complex-plane coordinates
-      const realMin = centerX - scale / 2;
-      const realMax = centerX + scale / 2;
-      const imagMin = centerY - (scale * canvasHeight / canvasWidth) / 2;
-      const imagMax = centerY + (scale * canvasHeight / canvasWidth) / 2;
+    <!-- Inline worker script for Mandelbrot tile computation -->
+    <script type="text/javascript" id="workerScript">
+        function computeMandelbrotTile(tileX, tileY, tileWidth, tileHeight,
+            centerX, centerY, scale,
+            canvasWidth, canvasHeight, maxIter) {
+            // Convert the tile's pixel range into complex-plane coordinates
+            const realMin = centerX - scale / 2;
+            const realMax = centerX + scale / 2;
+            const imagMin = centerY - (scale * canvasHeight / canvasWidth) / 2;
+            const imagMax = centerY + (scale * canvasHeight / canvasWidth) / 2;
 
-      const pixels = new Uint8ClampedArray(tileWidth * tileHeight * 4);
+            const pixels = new Uint8ClampedArray(tileWidth * tileHeight * 4);
 
-      function mandelbrotIter(cr, ci, maxIter) {
-        let xr = 0, xi = 0;
-        for (let i = 0; i < maxIter; i++) {
-          const x2 = xr*xr, y2 = xi*xi;
-          if (x2 + y2 > 4) return i; // escapes
-          const twoXY = 2*xr*xi;
-          xr = x2 - y2 + cr;
-          xi = twoXY + ci;
+            function mandelbrotIter(cr, ci, maxIter) {
+                let xr = 0, xi = 0;
+                for (let i = 0; i < maxIter; i++) {
+                    const x2 = xr * xr, y2 = xi * xi;
+                    if (x2 + y2 > 4) return i; // escapes
+                    const twoXY = 2 * xr * xi;
+                    xr = x2 - y2 + cr;
+                    xi = twoXY + ci;
+                }
+                return maxIter; // in-set
+            }
+
+            let idx = 0;
+            for (let py = 0; py < tileHeight; py++) {
+                const yOnCanvas = tileY + py;
+                const ci = imagMin + (yOnCanvas / (canvasHeight - 1)) * (imagMax - imagMin);
+
+                for (let px = 0; px < tileWidth; px++) {
+                    const xOnCanvas = tileX + px;
+                    const cr = realMin + (xOnCanvas / (canvasWidth - 1)) * (realMax - realMin);
+
+                    const iter = mandelbrotIter(cr, ci, maxIter);
+                    if (iter === maxIter) {
+                        // in-set = black
+                        pixels[idx + 0] = 0;
+                        pixels[idx + 1] = 0;
+                        pixels[idx + 2] = 0;
+                    } else {
+                        // a simple color gradient
+                        const c = Math.floor(255 * iter / maxIter);
+                        pixels[idx + 0] = c;    // R
+                        pixels[idx + 1] = c;    // G
+                        pixels[idx + 2] = 255;  // B
+                    }
+                    pixels[idx + 3] = 255;    // Alpha
+                    idx += 4;
+                }
+            }
+            return pixels;
         }
-        return maxIter; // in-set
-      }
 
-      let idx = 0;
-      for (let py = 0; py < tileHeight; py++) {
-        const yOnCanvas = tileY + py;
-        const ci = imagMin + (yOnCanvas / (canvasHeight - 1)) * (imagMax - imagMin);
+        self.onmessage = (e) => {
+            const { tileX, tileY, tileWidth, tileHeight,
+                centerX, centerY, scale,
+                canvasWidth, canvasHeight, maxIter } = e.data;
 
-        for (let px = 0; px < tileWidth; px++) {
-          const xOnCanvas = tileX + px;
-          const cr = realMin + (xOnCanvas / (canvasWidth - 1)) * (realMax - realMin);
-
-          const iter = mandelbrotIter(cr, ci, maxIter);
-          if (iter === maxIter) {
-            // in-set = black
-            pixels[idx+0] = 0;
-            pixels[idx+1] = 0;
-            pixels[idx+2] = 0;
-          } else {
-            // a simple color gradient
-            const c = Math.floor(255 * iter / maxIter);
-            pixels[idx+0] = c;    // R
-            pixels[idx+1] = c;    // G
-            pixels[idx+2] = 255;  // B
-          }
-          pixels[idx+3] = 255;    // Alpha
-          idx += 4;
-        }
-      }
-      return pixels;
-    }
-
-    self.onmessage = (e) => {
-      const { tileX, tileY, tileWidth, tileHeight,
-              centerX, centerY, scale,
-              canvasWidth, canvasHeight, maxIter } = e.data;
-
-      const data = computeMandelbrotTile(
-        tileX, tileY, tileWidth, tileHeight,
-        centerX, centerY, scale,
-        canvasWidth, canvasHeight, maxIter
-      );
-      // Transfer data.buffer to avoid copy overhead
-      self.postMessage({ tileX, tileY, tileWidth, tileHeight, pixels: data }, [data.buffer]);
-    };
-  </script>
-
-  <script>
-    // --------------------
-    // MAIN THREAD / SETUP
-    // --------------------
-
-    const canvas = document.getElementById('fractalCanvas');
-    const ctx = canvas.getContext('2d');
-    const info = document.getElementById('info');
-
-    // We'll keep an offscreen canvas as a "snapshot" for zoom animations
-    const snapshotCanvas = document.createElement('canvas');
-    const snapshotCtx = snapshotCanvas.getContext('2d');
-
-    // The fractal's "current" view (used for rendering & real-time panning)
-    let currentCenterX = -0.5;
-    let currentCenterY = 0.0;
-    let currentScale   = 3.5;
-
-    // The fractal's "target" view (only used for SMOOTH ZOOM)
-    let newCenterX = currentCenterX;
-    let newCenterY = currentCenterY;
-    let newScale   = currentScale;
-
-    // We'll store "old" for zoom animation (not for panning).
-    let oldCenterX, oldCenterY, oldScale;
-
-    let timeoutId = null;
-
-    const NUM_WORKERS = navigator.hardwareConcurrency || 4;
-    let workers = [];
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      snapshotCanvas.width = canvas.width;
-      snapshotCanvas.height = canvas.height;
-    }
-    window.addEventListener('resize', () => {
-      resizeCanvas();
-      drawFinalFractal(true);
-    });
-    resizeCanvas();
-
-    // ---------------------------------
-    // PAN: NO-LAG REAL-TIME DRAG
-    // ---------------------------------
-
-    let isDragging = false;
-    let dragStartX = 0, dragStartY = 0;
-    // We'll store the fractal center at the moment of mousedown
-    let panStartCenterX, panStartCenterY, panStartScale;
-
-    canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-
-      // For panning, freeze the fractal's "current" state as the base
-      panStartCenterX = currentCenterX;
-      panStartCenterY = currentCenterY;
-      panStartScale   = currentScale;
-
-      // Make a snapshot so we can transform it in real-time
-      snapshotCtx.drawImage(canvas, 0, 0);
-    });
-
-    canvas.addEventListener('mouseup', () => {
-      isDragging = false;
-      // Once the user finishes panning, do a final tile render
-      delayDrawFinalFractal(false, 0);
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-
-      // How many pixels have we dragged?
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-
-      // Convert that to a delta in the complex plane
-      const deltaXComplex = dx * (panStartScale / canvas.width);
-      const deltaYComplex = dy * (panStartScale / canvas.width);
-
-      // "map-like" => centerX decreases if dx>0
-      currentCenterX = newCenterX = panStartCenterX - dx * (panStartScale / canvas.width);
-      currentCenterY = newCenterY = panStartCenterY - dy * (panStartScale / canvas.width);
-      currentScale   = newScale = panStartScale; // scale doesn't change while dragging
-
-      // Show real-time panned fractal by transforming the snapshot
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-
-      // Also fix the sign in translate()
-      ctx.translate(dx, dy);
-
-      // Draw the old snapshot
-      ctx.drawImage(snapshotCanvas, 0, 0);
-
-      ctx.restore();
-
-      info.textContent = `Panning... Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)})`;
-    });
-
-    // ---------------------------------
-    // ZOOM: SMOOTH ANIMATION
-    // ---------------------------------
-
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const zoomFactor = 1.1;
-
-      // 1) Find mouse position on canvas
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      // 2) Convert that to complex-plane coords before zoom
-      const realMin = newCenterX - newScale/2;
-      const realMax = newCenterX + newScale/2;
-      const imagMin = newCenterY - (newScale * canvas.height / canvas.width)/2;
-      const imagMax = newCenterY + (newScale * canvas.height / canvas.width)/2;
-
-      const cr_before = realMin + (mx / canvas.width)*(realMax - realMin);
-      const ci_before = imagMin + (my / canvas.height)*(imagMax - imagMin);
-
-      // 3) Zoom in or out
-      if (e.deltaY < 0) {
-        // zoom in
-        newScale /= zoomFactor;
-      } else {
-        // zoom out
-        newScale *= zoomFactor;
-      }
-
-      // 4) Recompute after zoom
-      const realMinNew = newCenterX - newScale/2;
-      const realMaxNew = newCenterX + newScale/2;
-      const imagMinNew = newCenterY - (newScale * canvas.height / canvas.width)/2;
-      const imagMaxNew = newCenterY + (newScale * canvas.height / canvas.width)/2;
-
-      const cr_after = realMinNew + (mx / canvas.width)*(realMaxNew - realMinNew);
-      const ci_after = imagMinNew + (my / canvas.height)*(imagMaxNew - imagMinNew);
-
-      // 5) Shift center so the mouse point stays anchored
-      newCenterX += (cr_before - cr_after);
-      newCenterY += (ci_before - ci_after);
-
-      // Start a smooth animation from the "current" to "new" fractal view
-      startSmoothZoom();
-    }, { passive: false });
-
-    // Smooth zoom animation variables
-    const animDuration = 300; // 300ms
-    let animInProgress = false;
-
-    function startSmoothZoom() {
-      // Snapshot the current fractal
-      snapshotCtx.drawImage(canvas, 0, 0);
-
-      // Record "old" from the fractal's current
-      oldCenterX = currentCenterX;
-      oldCenterY = currentCenterY;
-      oldScale   = currentScale;
-
-      animateZoomFrame()
-    }
-
-    function animateZoomFrame() {
-      // Interpolate current from old -> new
-      currentCenterX = newCenterX;
-      currentCenterY = newCenterY;
-      currentScale   = newScale;
-
-      // Clear main canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Transform the old snapshot so it "looks like" partial zoom
-      ctx.save();
-      const scaleRatio = (oldScale / currentScale);
-
-      // Pan difference in complex-plane
-      const dxComplex = currentCenterX - oldCenterX;
-      const dyComplex = currentCenterY - oldCenterY;
-      // Convert that to pixels for the current scale
-      const dxPixels = dxComplex / (currentScale / canvas.width);
-      const dyPixels = dyComplex / (currentScale / canvas.width);
-
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.scale(scaleRatio, scaleRatio);
-      ctx.translate(-canvas.width / 2 - dxPixels / scaleRatio,
-                    -canvas.height / 2 - dyPixels / scaleRatio);
-
-      ctx.drawImage(snapshotCanvas, 0, 0);
-      ctx.restore();
-
-      animInProgress = false;
-      // Crisp final fractal
-      delayDrawFinalFractal(false, 500);
-    }
-
-    // -------------------------
-    // TILE-BASED FINAL RENDER
-    // -------------------------
-    let nextWorkerIndex = 0;
-
-    resetWorkers();
-
-    function resetWorkers() {
-      const workerScript = document.getElementById('workerScript').textContent;
-      const blob = new Blob([workerScript], {type:'text/javascript'});
-      const url = URL.createObjectURL(blob);
-      workers.forEach(worker => worker.terminate());
-      workers = [];
-      for (let i=0; i<NUM_WORKERS; i++) {
-        workers.push(new Worker(url));
-      }
-      nextWorkerIndex = 0;
-      let tilesRemaining = 0;
-      workers.forEach(worker => {
-      worker.onmessage = (e) => {
-          const { tileX, tileY, tileWidth, tileHeight, pixels } = e.data;
-          const imageData = new ImageData(pixels, tileWidth, tileHeight);
-
-          ctx.putImageData(imageData, tileX, tileY);
-
-          tilesRemaining--;
-          if (tilesRemaining === 0) {
-            info.textContent = `Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)}) Scale=${currentScale.toFixed(3)} (Done)`;
-          } else {
-            info.textContent = `Rendering... ${tilesRemaining} left`;
-          }
+            const data = computeMandelbrotTile(
+                tileX, tileY, tileWidth, tileHeight,
+                centerX, centerY, scale,
+                canvasWidth, canvasHeight, maxIter
+            );
+            // Transfer data.buffer to avoid copy overhead
+            self.postMessage({ tileX, tileY, tileWidth, tileHeight, pixels: data }, [data.buffer]);
         };
-      });
-    }
+    </script>
 
-    function delayDrawFinalFractal(forceClear, delayMs) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      timeoutId = setTimeout(() => {
-        resetWorkers();
-        drawFinalFractal(forceClear);
-      }, delayMs);
-    }
+    <script>
+        // --------------------
+        // MAIN THREAD / SETUP
+        // --------------------
 
-    function drawFinalFractal(forceClear) {
-      const width = canvas.width;
-      const height = canvas.height;
-      if (forceClear) {
-        ctx.clearRect(0,0,width,height);
-      }
-      info.textContent = `Rendering final fractal...`;
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
 
-      const tileSize = 256;
-      const maxIter = 1000;
+        // We'll keep an offscreen canvas as a "snapshot" for zoom animations
+        const snapshotCanvas = document.createElement('canvas');
+        const snapshotCtx = snapshotCanvas.getContext('2d');
 
-      const xTiles = Math.ceil(width / tileSize);
-      const yTiles = Math.ceil(height / tileSize);
-      tilesRemaining = xTiles * yTiles;
+        // The fractal's "current" view (used for rendering & real-time panning)
+        let currentCenterX = -0.5;
+        let currentCenterY = 0.0;
+        let currentScale = 3.5;
 
-      for (let ty=0; ty<yTiles; ty++){
-        for (let tx=0; tx<xTiles; tx++){
-          const tileX = tx * tileSize;
-          const tileY = ty * tileSize;
-          const tw = Math.min(tileSize, width - tileX);
-          const th = Math.min(tileSize, height - tileY);
+        // The fractal's "target" view (only used for SMOOTH ZOOM)
+        let newCenterX = currentCenterX;
+        let newCenterY = currentCenterY;
+        let newScale = currentScale;
 
-          const iter = Math.floor(1000 * Math.log2(1 / currentScale));
+        // We'll store "old" for zoom animation (not for panning).
+        let oldCenterX, oldCenterY, oldScale;
 
-          const msg = {
-            tileX, tileY,
-            tileWidth: tw,
-            tileHeight: th,
-            centerX: currentCenterX,
-            centerY: currentCenterY,
-            scale:   currentScale,
-            canvasWidth: width,
-            canvasHeight: height,
-            maxIter: Math.max(maxIter, iter),
-          };
+        let timeoutId = null;
 
-          const w = workers[nextWorkerIndex];
-          nextWorkerIndex = (nextWorkerIndex + 1) % workers.length;
-          w.postMessage(msg);
+        const NUM_WORKERS = navigator.hardwareConcurrency || 4;
+        let workers = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            snapshotCanvas.width = canvas.width;
+            snapshotCanvas.height = canvas.height;
         }
-      }
-    }
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawFinalFractal(true);
+        });
+        resizeCanvas();
 
-    // Initial full render
-    drawFinalFractal(true);
-  </script>
+        // ---------------------------------
+        // PAN: NO-LAG REAL-TIME DRAG
+        // ---------------------------------
+
+        let isDragging = false;
+        let dragStartX = 0, dragStartY = 0;
+        // We'll store the fractal center at the moment of mousedown
+        let panStartCenterX, panStartCenterY, panStartScale;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+
+            // For panning, freeze the fractal's "current" state as the base
+            panStartCenterX = currentCenterX;
+            panStartCenterY = currentCenterY;
+            panStartScale = currentScale;
+
+            // Make a snapshot so we can transform it in real-time
+            snapshotCtx.drawImage(canvas, 0, 0);
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            // Once the user finishes panning, do a final tile render
+            delayDrawFinalFractal(false, 0);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            // How many pixels have we dragged?
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+
+            // Convert that to a delta in the complex plane
+            const deltaXComplex = dx * (panStartScale / canvas.width);
+            const deltaYComplex = dy * (panStartScale / canvas.width);
+
+            // "map-like" => centerX decreases if dx>0
+            currentCenterX = newCenterX = panStartCenterX - dx * (panStartScale / canvas.width);
+            currentCenterY = newCenterY = panStartCenterY - dy * (panStartScale / canvas.width);
+            currentScale = newScale = panStartScale; // scale doesn't change while dragging
+
+            // Show real-time panned fractal by transforming the snapshot
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+
+            // Also fix the sign in translate()
+            ctx.translate(dx, dy);
+
+            // Draw the old snapshot
+            ctx.drawImage(snapshotCanvas, 0, 0);
+
+            ctx.restore();
+
+            info.textContent = `Panning... Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)})`;
+        });
+
+        // ---------------------------------
+        // ZOOM: SMOOTH ANIMATION
+        // ---------------------------------
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+
+            // 1) Find mouse position on canvas
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            // 2) Convert that to complex-plane coords before zoom
+            const realMin = newCenterX - newScale / 2;
+            const realMax = newCenterX + newScale / 2;
+            const imagMin = newCenterY - (newScale * canvas.height / canvas.width) / 2;
+            const imagMax = newCenterY + (newScale * canvas.height / canvas.width) / 2;
+
+            const cr_before = realMin + (mx / canvas.width) * (realMax - realMin);
+            const ci_before = imagMin + (my / canvas.height) * (imagMax - imagMin);
+
+            // 3) Zoom in or out
+            if (e.deltaY < 0) {
+                // zoom in
+                newScale /= zoomFactor;
+            } else {
+                // zoom out
+                newScale *= zoomFactor;
+            }
+
+            // 4) Recompute after zoom
+            const realMinNew = newCenterX - newScale / 2;
+            const realMaxNew = newCenterX + newScale / 2;
+            const imagMinNew = newCenterY - (newScale * canvas.height / canvas.width) / 2;
+            const imagMaxNew = newCenterY + (newScale * canvas.height / canvas.width) / 2;
+
+            const cr_after = realMinNew + (mx / canvas.width) * (realMaxNew - realMinNew);
+            const ci_after = imagMinNew + (my / canvas.height) * (imagMaxNew - imagMinNew);
+
+            // 5) Shift center so the mouse point stays anchored
+            newCenterX += (cr_before - cr_after);
+            newCenterY += (ci_before - ci_after);
+
+            // Start a smooth animation from the "current" to "new" fractal view
+            startSmoothZoom();
+        }, { passive: false });
+
+        // Smooth zoom animation variables
+        const animDuration = 300; // 300ms
+        let animInProgress = false;
+
+        function startSmoothZoom() {
+            // Snapshot the current fractal
+            snapshotCtx.drawImage(canvas, 0, 0);
+
+            // Record "old" from the fractal's current
+            oldCenterX = currentCenterX;
+            oldCenterY = currentCenterY;
+            oldScale = currentScale;
+
+            animateZoomFrame()
+        }
+
+        function animateZoomFrame() {
+            // Interpolate current from old -> new
+            currentCenterX = newCenterX;
+            currentCenterY = newCenterY;
+            currentScale = newScale;
+
+            // Clear main canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Transform the old snapshot so it "looks like" partial zoom
+            ctx.save();
+            const scaleRatio = (oldScale / currentScale);
+
+            // Pan difference in complex-plane
+            const dxComplex = currentCenterX - oldCenterX;
+            const dyComplex = currentCenterY - oldCenterY;
+            // Convert that to pixels for the current scale
+            const dxPixels = dxComplex / (currentScale / canvas.width);
+            const dyPixels = dyComplex / (currentScale / canvas.width);
+
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(scaleRatio, scaleRatio);
+            ctx.translate(-canvas.width / 2 - dxPixels / scaleRatio,
+                -canvas.height / 2 - dyPixels / scaleRatio);
+
+            ctx.drawImage(snapshotCanvas, 0, 0);
+            ctx.restore();
+
+            animInProgress = false;
+            // Crisp final fractal
+            delayDrawFinalFractal(false, 500);
+        }
+
+        // -------------------------
+        // TILE-BASED FINAL RENDER
+        // -------------------------
+        let nextWorkerIndex = 0;
+
+        resetWorkers();
+
+        function resetWorkers() {
+            const workerScript = document.getElementById('workerScript').textContent;
+            const blob = new Blob([workerScript], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            workers.forEach(worker => worker.terminate());
+            workers = [];
+            for (let i = 0; i < NUM_WORKERS; i++) {
+                workers.push(new Worker(url));
+            }
+            nextWorkerIndex = 0;
+            let tilesRemaining = 0;
+            workers.forEach(worker => {
+                worker.onmessage = (e) => {
+                    const { tileX, tileY, tileWidth, tileHeight, pixels } = e.data;
+                    const imageData = new ImageData(pixels, tileWidth, tileHeight);
+
+                    ctx.putImageData(imageData, tileX, tileY);
+
+                    tilesRemaining--;
+                    if (tilesRemaining === 0) {
+                        info.textContent = `Center=(${currentCenterX.toFixed(3)}, ${currentCenterY.toFixed(3)}) Scale=${currentScale.toFixed(3)} (Done)`;
+                    } else {
+                        info.textContent = `Rendering... ${tilesRemaining} left`;
+                    }
+                };
+            });
+        }
+
+        function delayDrawFinalFractal(forceClear, delayMs) {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+            timeoutId = setTimeout(() => {
+                resetWorkers();
+                drawFinalFractal(forceClear);
+            }, delayMs);
+        }
+
+        function drawFinalFractal(forceClear) {
+            const width = canvas.width;
+            const height = canvas.height;
+            if (forceClear) {
+                ctx.clearRect(0, 0, width, height);
+            }
+            info.textContent = `Rendering final fractal...`;
+
+            const tileSize = 256;
+            const maxIter = 1000;
+
+            const xTiles = Math.ceil(width / tileSize);
+            const yTiles = Math.ceil(height / tileSize);
+            tilesRemaining = xTiles * yTiles;
+
+            for (let ty = 0; ty < yTiles; ty++) {
+                for (let tx = 0; tx < xTiles; tx++) {
+                    const tileX = tx * tileSize;
+                    const tileY = ty * tileSize;
+                    const tw = Math.min(tileSize, width - tileX);
+                    const th = Math.min(tileSize, height - tileY);
+
+                    const iter = Math.floor(1000 * Math.log2(1 / currentScale));
+
+                    const msg = {
+                        tileX, tileY,
+                        tileWidth: tw,
+                        tileHeight: th,
+                        centerX: currentCenterX,
+                        centerY: currentCenterY,
+                        scale: currentScale,
+                        canvasWidth: width,
+                        canvasHeight: height,
+                        maxIter: Math.max(maxIter, iter),
+                    };
+
+                    const w = workers[nextWorkerIndex];
+                    nextWorkerIndex = (nextWorkerIndex + 1) % workers.length;
+                    w.postMessage(msg);
+                }
+            }
+        }
+
+        // Initial full render
+        drawFinalFractal(true);
+    </script>
 </body>
-</html>
 
+</html>
