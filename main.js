@@ -237,7 +237,7 @@ function renderFractalCPU(scale = 1) {
         zoom: state.zoom,
     };
 
-    const worker = new Worker('fractal-worker.js');
+    const worker = new Worker('worker.js');
     currentWorkers.push(worker);
 
     worker.onmessage = (e) => {
