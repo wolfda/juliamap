@@ -13,6 +13,7 @@ html, body {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none; /* Prevents the browser’s default gesture handling */
 }
 
 /* A small box in the bottom-right corner */

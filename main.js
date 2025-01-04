@@ -3,7 +3,7 @@
  * 
  * Implements:
  * 1. Setting up the canvas to display Mandelbrot (and eventually Julia sets if extended).
- * 2. Handling user interactions: pan (drag), zoom (wheel).
+ * 2. Handling user interactions (pan, zoom) for both mouse and touch.
  * 3. Maintaining and updating URL to reflect x, y, zoom level.
  * 4. Using Web Workers to compute fractal images (CPU).
  * 5. Doing an initial, coarse (1/8 resolution) preview in WebGL, then refining via CPU.
@@ -21,6 +21,11 @@ let state = {
 // Keep track of pointer state during panning
 let isDragging = false;
 let lastMousePos = { x: 0, y: 0 };
+
+// For touch gestures
+let activeTouches = [];
+let initialDistance = 0;
+let initialZoom = state.zoom;
 
 // Canvas references
 const canvas = document.getElementById('fractalCanvas');
@@ -67,7 +72,7 @@ window.addEventListener('resize', () => {
  * Canvas event listeners for panning and zooming
  */
 function attachEventListeners() {
-    // Mouse down
+    // --- Mouse events ---
     canvas.addEventListener('mousedown', (e) => {
         isDragging = true;
         lastMousePos = { x: e.clientX, y: e.clientY };
@@ -84,7 +89,7 @@ function attachEventListeners() {
     canvas.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
 
-        // 1. Update state.x, state.y from dx, dy
+        // Update state.x, state.y from dx, dy
         const dx = e.clientX - lastMousePos.x;
         const dy = e.clientY - lastMousePos.y;
         lastMousePos = { x: e.clientX, y: e.clientY };
@@ -93,26 +98,23 @@ function attachEventListeners() {
         // Note the sign for y movement matches CPU
         state.y += dy * scale;
 
-        // 2. Possibly do a real-time quick fractal render
+        // Possibly do a real-time quick fractal render
         const now = performance.now();
         if (now - lastRenderTime > RENDER_INTERVAL_MS) {
-            const previewScale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-            const cpu = state.zoom > MAX_GPU_ZOOM;
-            renderFractal({ cpu, scale: previewScale });
+            previewAndScheduleFinalRender();
             lastRenderTime = now;
+        } else {
+            clearTimeout(renderTimeoutId);
+            renderTimeoutId = setTimeout(() => {
+                renderFractal({ cpu: true, scale: 1 });
+            }, 300);
         }
 
-        // 3. Always schedule the final render after a short delay
-        clearTimeout(renderTimeoutId);
-        renderTimeoutId = setTimeout(() => {
-            renderFractal({ cpu: true, scale: 1 });
-        }, 300);
-
-        // 4. Update URL
+        // Update URL
         updateURL();
     });
 
-    // Wheel for zoom
+    // Mouse wheel to zoom
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         // Zoom toward the cursor
@@ -131,20 +133,112 @@ function attachEventListeners() {
         state.x -= (newCenterX - cx);
         state.y -= (newCenterY - cy);
 
-        // Quick preview
-        const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-        const cpu = state.zoom > MAX_GPU_ZOOM;
-        renderFractal({ cpu, scale });
-
-        // Final CPU version after a delay
-        clearTimeout(renderTimeoutId);
-        renderTimeoutId = setTimeout(() => {
-            renderFractal({ cpu: true, scale: 1 });
-        }, 300);
-
-        // Update URL
+        previewAndScheduleFinalRender();
         updateURL();
     }, { passive: false });
+
+
+    // --- Touch events ---
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        activeTouches = Array.from(e.touches);
+
+        if (activeTouches.length === 1) {
+            // Single-finger drag
+            const touch = activeTouches[0];
+            lastMousePos = { x: touch.clientX, y: touch.clientY };
+            isDragging = true;
+        } else if (activeTouches.length === 2) {
+            // Two-finger pinch
+            isDragging = false;
+            initialDistance = getDistance(activeTouches[0], activeTouches[1]);
+            initialZoom = state.zoom;
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        activeTouches = Array.from(e.touches);
+
+        if (activeTouches.length === 1) {
+            // Single-finger drag
+            const touch = activeTouches[0];
+            if (!isDragging) return;
+
+            const dx = touch.clientX - lastMousePos.x;
+            const dy = touch.clientY - lastMousePos.y;
+            lastMousePos = { x: touch.clientX, y: touch.clientY };
+
+            const scale = 4 / (canvas.width * state.zoom);
+            state.x -= dx * scale * 2;
+            state.y += dy * scale * 2;
+
+            previewAndScheduleFinalRender();
+            updateURL();
+        } else if (activeTouches.length === 2) {
+            // Pinch to zoom
+            const dist = getDistance(activeTouches[0], activeTouches[1]);
+            const zoomFactor = dist / initialDistance;
+
+            const mid = getMidpoint(activeTouches[0], activeTouches[1]);
+            const { cx, cy } = screenToComplex(mid.x, mid.y);
+
+            // Update zoom
+            state.zoom = initialZoom * zoomFactor;
+
+            // Keep midpoint stable => shift center
+            const { cx: newCx, cy: newCy } = screenToComplex(mid.x, mid.y);
+            state.x -= (newCx - cx);
+            state.y -= (newCy - cy);
+
+            previewAndScheduleFinalRender();
+            updateURL();
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        activeTouches = Array.from(e.touches);
+        if (activeTouches.length === 0) {
+            isDragging = false;
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        activeTouches = [];
+        isDragging = false;
+    }, { passive: false });
+}
+
+/**
+ * Render a quick preview, then schedule a final CPU render.
+ */
+function previewAndScheduleFinalRender() {
+    const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
+    const cpu = state.zoom > MAX_GPU_ZOOM;
+    renderFractal({ cpu, scale });
+
+    clearTimeout(renderTimeoutId);
+    renderTimeoutId = setTimeout(() => {
+        renderFractal({ cpu: true, scale: 1 });
+    }, 300);
+}
+
+/**
+ * Helpers for pinch gestures
+ */
+function getDistance(t1, t2) {
+    const dx = t2.clientX - t1.clientX;
+    const dy = t2.clientY - t1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getMidpoint(t1, t2) {
+    return {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+    };
 }
 
 /**
@@ -197,17 +291,14 @@ function resizeCanvas() {
 }
 
 /**
- * Main function to render the fractal
- * 
- * @param {Object} options 
- * @param {Boolean} options.quick If true, do a coarse 1/8 resolution *WebGL* preview
+ * Main function to render the fractal (preview or final)
  */
 function renderFractal(options = {}) {
     // Stop any existing workers
     currentWorkers.forEach((w) => w.terminate());
     currentWorkers = [];
 
-    // Quick PREVIEW via WebGL
+    // If "cpu" is true, do CPU rendering; else do WebGL preview
     if (options.cpu) {
         renderFractalCPU(options.scale);
     } else {
@@ -215,14 +306,12 @@ function renderFractal(options = {}) {
     }
 }
 
-/** 
- * CPU rendering with worker 
- * We'll measure the time once the worker returns, 
- * compute FLOPS, then update the gauge. 
+/**
+ * CPU rendering with a Worker
+ * We'll measure iteration count => compute FLOP => update gauge
  */
 function renderFractalCPU(scale = 1) {
-    // We create an offscreen canvas to draw into
-    // Then blit to main canvas.
+    // Offscreen render, then blit
     const w = Math.floor(canvas.width * scale);
     const h = Math.floor(canvas.height * scale);
 
@@ -234,33 +323,31 @@ function renderFractalCPU(scale = 1) {
         zoom: state.zoom,
     };
 
-    const worker = new Worker("worker.js");
+    const worker = new Worker('worker.js');
     currentWorkers.push(worker);
 
     worker.onmessage = (e) => {
         const { width, height, imageDataArray, totalIterations } = e.data;
 
-        // Create imageData object
+        // Create an offscreen canvas
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = width;
         offscreenCanvas.height = height;
         const offscreenCtx = offscreenCanvas.getContext('2d');
 
+        // Populate image data
         const imageData = offscreenCtx.createImageData(width, height);
         imageData.data.set(imageDataArray);
         offscreenCtx.putImageData(imageData, 0, 0);
 
-        // Now draw the offscreen canvas to main canvas, scaling up
+        // Draw it onto the main canvas, scaled
         ctx.save();
         ctx.scale(1 / scale, 1 / scale);
         ctx.drawImage(offscreenCanvas, 0, 0);
         ctx.restore();
 
-        // -- Compute CPU FLOPS & throughput:
-        // total FLOP = totalIterations * 6 
+        // FLOP estimate
         const flop = totalIterations * 6;
-
-        // Update the gauge UI
         updateFlopStats(flop);
     };
 
@@ -268,8 +355,7 @@ function renderFractalCPU(scale = 1) {
 }
 
 /**
- * Quick WebGL-based preview.
- * We also measure GPU time to estimate GFlop/s for the preview. 
+ * Quick WebGL-based preview
  */
 let gl = null;
 let webGLProgram = null;
@@ -384,7 +470,7 @@ function initWebGL() {
         -1, -1,
         1, -1,
         -1, 1,
-        1, 1,
+        1, 1
     ]);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(aPosition);
@@ -404,18 +490,17 @@ function initWebGL() {
 }
 
 /**
- * Render at 1/8 resolution using WebGL, then up-scale
+ * Render using WebGL, then up-scale
  */
 function renderFractalWebGL(scale = 1) {
     if (!gl) {
-        // If WebGL not available, fallback to CPU preview
-        renderFractalCPU();
+        // WebGL not supported => fallback to CPU
+        renderFractalCPU(scale);
         return;
     }
 
     const offscreenCanvas = gl.canvas;
 
-    // 1/8 of main canvas
     const w = Math.floor(canvas.width * scale);
     const h = Math.floor(canvas.height * scale);
 
@@ -433,13 +518,16 @@ function renderFractalWebGL(scale = 1) {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // Blit to main canvas (2D)
+    // Blit to main canvas
     ctx.save();
     ctx.scale(1 / scale, 1 / scale);
     ctx.drawImage(offscreenCanvas, 0, 0);
     ctx.restore();
 }
 
+/**
+ * Update the FLOP stats overlay
+ */
 function updateFlopStats(flop) {
     const el = document.getElementById('flopStats');
     if (!el) return;
@@ -455,6 +543,5 @@ function updateFlopStats(flop) {
 
     const flopStr = formatNumber(flop);
 
-    // Example combined line: FLOP: 50G - cpu: 1.2G/s - gpu: 11.4G/s
     el.innerHTML = `${flopStr}FLOP`;
 }
