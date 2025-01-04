@@ -1,74 +1,64 @@
-/**
- * fractal-worker.js
- * 
- * This worker receives { width, height, centerX, centerY, zoom }
- * and returns image data for the Mandelbrot set at that viewport.
- * 
- * For demonstration, it uses a simple iteration approach with
- * a maximum of ~200-1000 iterations. This is easily extended or
- * replaced by more advanced algorithms or colorings.
- */
+// fractal-worker.js
 
-self.onmessage = (e) => {
-    const { width, height, centerX, centerY, zoom } = e.data;
-  
-    const maxIter = 500; // For demonstration. Increase for better detail.
-    // We'll map screen coords to the complex plane:
-    // The entire set extends roughly from x ∈ [-2, +2], y ∈ [-2, +2].
-    // At zoom=1, the width in the complex plane is 4. 
-    // => scale in real units = 4 / width (for zoom=1). 
-    // => for general zoom: scale = (4 / width) / zoom
-    const scale = 4 / width / zoom;
-  
-    // Precompute some color lookup if desired, or compute on the fly
-    // Create a typed array for the image data (RGBA for each pixel)
-    const imageDataArray = new Uint8ClampedArray(width * height * 4);
-  
-    for (let py = 0; py < height; py++) {
-      // Map py -> imaginary coordinate
-      // We want the center of the image to be centerY
-      // So row py offset from height/2
-      const cy = centerY - (py - height / 2) * scale;
-  
-      for (let px = 0; px < width; px++) {
-        // Map px -> real coordinate
-        const cx = centerX + (px - width / 2) * scale;
-  
-        // Now do the Mandelbrot iteration
-        let zx = 0, zy = 0;
-        let iter = 0;
-        while (zx*zx + zy*zy < 4 && iter < maxIter) {
-          const xTemp = zx*zx - zy*zy + cx;
-          zy = 2 * zx * zy + cy;
-          zx = xTemp;
-          iter++;
-        }
-  
-        // Color based on iter
-        const idx = (py * width + px) * 4;
-        if (iter === maxIter) {
-          // Inside the set => black
-          imageDataArray[idx] = 0;
-          imageDataArray[idx + 1] = 0;
-          imageDataArray[idx + 2] = 0;
-          imageDataArray[idx + 3] = 255; // alpha
-        } else {
-          // Outside => pick some color
-          // Example: a simple gradient
-          const c = 255 - Math.floor((iter / maxIter) * 255);
-          imageDataArray[idx] = c;
-          imageDataArray[idx + 1] = c;
-          imageDataArray[idx + 2] = 255;
-          imageDataArray[idx + 3] = 255; // alpha
+onmessage = function (e) {
+  const { width, height, centerX, centerY, zoom } = e.data;
+
+  // We’ll track totalIterations to estimate FLOPS
+  let totalIterations = 0;
+
+  // Typical CPU fractal iteration
+  const maxIter = 500;
+  const imageDataArray = new Uint8ClampedArray(width * height * 4);
+
+  for (let py = 0; py < height; py++) {
+    // Convert py to fractal coords
+    for (let px = 0; px < width; px++) {
+      // Map (px, py) -> complex plane
+      const scale = 4.0 / (width * zoom);
+      const x0 = centerX + (px - width / 2) * scale;
+      const y0 = centerY - (py - height / 2) * scale;
+
+      let x = 0;
+      let y = 0;
+      let iteration = 0;
+      for (iteration = 0; iteration < maxIter; iteration++) {
+        const x2 = x * x - y * y + x0;
+        const y2 = 2.0 * x * y + y0;
+        x = x2;
+        y = y2;
+
+        // If we escape radius > 2, break out
+        if ((x * x + y * y) > 4.0) {
+          break;
         }
       }
+
+      // iteration count used => iteration + 1
+      totalIterations += (iteration + 1);
+
+      // Color the pixel (same as before)
+      const idx = (py * width + px) * 4;
+      if (iteration === maxIter) {
+        // inside
+        imageDataArray[idx + 0] = 0;
+        imageDataArray[idx + 1] = 0;
+        imageDataArray[idx + 2] = 0;
+        imageDataArray[idx + 3] = 255;
+      } else {
+        const c = 255 - Math.floor((iteration / maxIter) * 255);
+        imageDataArray[idx + 0] = c;
+        imageDataArray[idx + 1] = c;
+        imageDataArray[idx + 2] = 255;
+        imageDataArray[idx + 3] = 255;
+      }
     }
-  
-    // Post back to main thread
-    self.postMessage({
-      width,
-      height,
-      imageDataArray
-    }, [imageDataArray.buffer]);
-  };
-  
+  }
+
+  // Return the full image plus iteration/time info
+  postMessage({
+    width,
+    height,
+    imageDataArray,
+    totalIterations
+  });
+};

@@ -20,7 +20,7 @@ The user should be able to zoom without any limit into the set.
 
 ### Statistics
 
-A small gauge shows in the upper right the real-time number of flops incurred by the background computation.
+A small gauge shows in the lower right corner showing number of flop incurred by the background computation. flop can be approximated by flop ~= 6 * iteration, since each iteration takes 6 floating point operations.
 
 ### URL
 

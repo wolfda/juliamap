@@ -13,7 +13,7 @@ const MAX_GPU_ZOOM = 256073;
 
 // Global state for the viewport
 let state = {
-    x: -0.5,      // real part (center)
+    x: -0.5,     // real part (center)
     y: 0,        // imaginary part (center)
     zoom: 1,     // zoom factor
 };
@@ -33,12 +33,6 @@ let renderTimeoutId = null;
 // Device pixel ratio for crisp rendering on high-DPI
 const dpr = window.devicePixelRatio || 1;
 
-/**
- * On load:
- *  - read URL query parameters for x, y, zoom 
- *  - set up event listeners 
- *  - do initial render
- */
 window.addEventListener('DOMContentLoaded', () => {
     readStateFromURL();
     resizeCanvas();
@@ -48,7 +42,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Initial render
     const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
     const cpu = state.zoom > MAX_GPU_ZOOM;
-    renderFractal({ cpu, scale }); // Initial render
+    renderFractal({ cpu, scale });
     renderTimeoutId = setTimeout(() => {
         renderFractal({ cpu: true, scale: 1 });
     }, 300);
@@ -105,6 +99,7 @@ function attachEventListeners() {
             const previewScale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
             const cpu = state.zoom > MAX_GPU_ZOOM;
             renderFractal({ cpu, scale: previewScale });
+            lastRenderTime = now;
         }
 
         // 3. Always schedule the final render after a short delay
@@ -220,8 +215,10 @@ function renderFractal(options = {}) {
     }
 }
 
-/**
- * CPU-based fractal render with worker (final, full resolution)
+/** 
+ * CPU rendering with worker 
+ * We'll measure the time once the worker returns, 
+ * compute FLOPS, then update the gauge. 
  */
 function renderFractalCPU(scale = 1) {
     // We create an offscreen canvas to draw into
@@ -237,11 +234,11 @@ function renderFractalCPU(scale = 1) {
         zoom: state.zoom,
     };
 
-    const worker = new Worker('worker.js');
+    const worker = new Worker("worker.js");
     currentWorkers.push(worker);
 
     worker.onmessage = (e) => {
-        const { width, height, imageDataArray } = e.data;
+        const { width, height, imageDataArray, totalIterations } = e.data;
 
         // Create imageData object
         const offscreenCanvas = document.createElement('canvas');
@@ -258,26 +255,29 @@ function renderFractalCPU(scale = 1) {
         ctx.scale(1 / scale, 1 / scale);
         ctx.drawImage(offscreenCanvas, 0, 0);
         ctx.restore();
+
+        // -- Compute CPU FLOPS & throughput:
+        // total FLOP = totalIterations * 6 
+        const flop = totalIterations * 6;
+
+        // Update the gauge UI
+        updateFlopStats(flop);
     };
 
     worker.postMessage(workerData);
 }
 
-// ----------------------------------------------------------------------------------
-// WEBGL CODE FOR THE PREVIEW
-// ----------------------------------------------------------------------------------
-
+/**
+ * Quick WebGL-based preview.
+ * We also measure GPU time to estimate GFlop/s for the preview. 
+ */
 let gl = null;
 let webGLProgram = null;
 let uResolution, uCenterZoom;
 
-/**
- * Initialize a WebGL context for the quick preview.
- */
 function initWebGL() {
-    // Create an offscreen canvas for the WebGL context
     const webGLCanvas = document.createElement('canvas');
-    webGLCanvas.width = 256; // will resize dynamically
+    webGLCanvas.width = 256;
     webGLCanvas.height = 256;
     webGLCanvas.style.display = 'none';
     document.body.appendChild(webGLCanvas);
@@ -435,8 +435,26 @@ function renderFractalWebGL(scale = 1) {
 
     // Blit to main canvas (2D)
     ctx.save();
-    // Scale up from 1/8 => 1
     ctx.scale(1 / scale, 1 / scale);
     ctx.drawImage(offscreenCanvas, 0, 0);
     ctx.restore();
+}
+
+function updateFlopStats(flop) {
+    const el = document.getElementById('flopStats');
+    if (!el) return;
+
+    // Format big numbers => G, M, K, etc.
+    const formatNumber = (val) => {
+        if (val > 1e12) return (val / 1e12).toFixed(2) + ' T';
+        if (val > 1e9) return (val / 1e9).toFixed(2) + ' G';
+        if (val > 1e6) return (val / 1e6).toFixed(2) + ' M';
+        if (val > 1e3) return (val / 1e3).toFixed(2) + ' K';
+        return val.toFixed(2);
+    };
+
+    const flopStr = formatNumber(flop);
+
+    // Example combined line: FLOP: 50G - cpu: 1.2G/s - gpu: 11.4G/s
+    el.innerHTML = `${flopStr}FLOP`;
 }
