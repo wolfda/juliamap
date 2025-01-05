@@ -165,13 +165,13 @@ function attachEventListeners() {
             const touch = activeTouches[0];
             if (!isDragging) return;
 
-            const dx = touch.clientX - lastMousePos.x;
-            const dy = touch.clientY - lastMousePos.y;
-            lastMousePos = { x: touch.clientX, y: touch.clientY };
+            const oldPos = screenToComplex(lastMousePos.x, lastMousePos.y);
+            const newPos = screenToComplex(touch.clientX, touch.clientY);
 
-            const scale = 4 / (canvas.width * state.zoom);
-            state.x -= dx * scale * 2;
-            state.y += dy * scale * 2;
+            state.x -= newPos.cx - oldPos.cx;
+            state.y -= newPos.cy - oldPos.cy;
+            
+            lastMousePos = { x: touch.clientX, y: touch.clientY };
 
             previewAndScheduleFinalRender();
             updateURL();
@@ -245,9 +245,11 @@ function getMidpoint(t1, t2) {
  * Convert screen coords to complex plane coords
  */
 function screenToComplex(sx, sy) {
+    const sxDevice = sx * dpr;
+    const syDevice = sy * dpr;
     const scale = 4 / (canvas.width * state.zoom);
-    const cx = state.x + (sx - canvas.width / 2) * scale;
-    const cy = state.y - (sy - canvas.height / 2) * scale;
+    const cx = state.x + (sxDevice - canvas.width / 2) * scale;
+    const cy = state.y - (syDevice - canvas.height / 2) * scale;
     return { cx, cy };
 }
 
