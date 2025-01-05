@@ -27,6 +27,19 @@ let activeTouches = [];
 let initialDistance = 0;
 let initialZoom = state.zoom;
 
+// Physics parameters to implement inertia on pan/zoom
+let velocity = { vx: 0, vy: 0 };
+let lastMoveTime = 0;
+let moveInertiaId = null; // store the current requestAnimationFrame id
+const PAN_FRICTION = 0.94;  // tweak friction factor (0 < FRICTION < 1)
+
+let zoomVelocity = 0;
+let lastZoomFactor = 0;
+let lastPinchTime = 0;
+let lastPinchScreenCenter = null;
+let zoomInertiaId = null;
+const ZOOM_FRICTION = 0.95;
+
 // Canvas references
 const canvas = document.getElementById('fractalCanvas');
 const ctx = canvas.getContext('2d');
@@ -141,6 +154,9 @@ function attachEventListeners() {
     // --- Touch events ---
     canvas.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        if (moveInertiaId) cancelAnimationFrame(moveInertiaId);
+        if (zoomInertiaId) cancelAnimationFrame(zoomInertiaId);
+
         activeTouches = Array.from(e.touches);
 
         if (activeTouches.length === 1) {
@@ -165,17 +181,34 @@ function attachEventListeners() {
             const touch = activeTouches[0];
             if (!isDragging) return;
 
+            const now = performance.now();
+            const dt = (now - lastMoveTime) || 16; // ms since last move (fallback ~16ms)
+
             const oldPos = screenToComplex(lastMousePos.x, lastMousePos.y);
             const newPos = screenToComplex(touch.clientX, touch.clientY);
 
-            state.x -= newPos.cx - oldPos.cx;
-            state.y -= newPos.cy - oldPos.cy;
-            
+            // Delta in fractal space
+            const dx = newPos.cx - oldPos.cx;
+            const dy = newPos.cy - oldPos.cy;
+
+            state.x -= dx;
+            state.y -= dy;
+
+            // Estimate velocity in fractal coords / ms
+            velocity.vx = dx / dt;
+            velocity.vy = dy / dt;
+
             lastMousePos = { x: touch.clientX, y: touch.clientY };
+            lastMoveTime = now;
 
             previewAndScheduleFinalRender();
             updateURL();
         } else if (activeTouches.length === 2) {
+            // track velocity
+            // (We need "deltaZoom" per millisecond or something similar)
+            const now = performance.now();
+            const dt = now - lastPinchTime || 16;
+
             // Pinch to zoom
             const dist = getDistance(activeTouches[0], activeTouches[1]);
             const zoomFactor = dist / initialDistance;
@@ -191,6 +224,13 @@ function attachEventListeners() {
             state.x -= (newCx - cx);
             state.y -= (newCy - cy);
 
+            // For simplicity, store ratio velocity: how quickly zoomFactor is changing
+            zoomVelocity = (zoomFactor - lastZoomFactor) / dt;
+
+            lastZoomFactor = zoomFactor;
+            lastPinchTime = now;
+            lastPinchScreenCenter = mid;
+
             previewAndScheduleFinalRender();
             updateURL();
         }
@@ -201,6 +241,7 @@ function attachEventListeners() {
         activeTouches = Array.from(e.touches);
         if (activeTouches.length === 0) {
             isDragging = false;
+            startInertia()
         }
     }, { passive: false });
 
@@ -209,6 +250,79 @@ function attachEventListeners() {
         activeTouches = [];
         isDragging = false;
     }, { passive: false });
+}
+
+/**
+ * Animate inertia on touch release.
+ */
+function startInertia() {
+    if (zoomInertiaId) cancelAnimationFrame(zoomInertiaId);
+
+    const speedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy + zoomVelocity * zoomVelocity;
+
+    // Stop if velocities are very small
+    if (speedSq < 1e-14) {
+        return;
+    }
+
+    if (lastPinchScreenCenter) {
+        // On zoom animation, lock pan animation
+        velocity = { vx: 0, vy: 0 };
+    }
+
+    let lastTime = performance.now();
+
+    function animate() {
+        const now = performance.now();
+        const dt = now - lastTime || 16;
+        lastTime = now;
+
+        // --- Pan inertia ---
+        state.x -= velocity.vx * dt;
+        state.y -= velocity.vy * dt;
+        velocity.vx *= PAN_FRICTION;
+        velocity.vy *= PAN_FRICTION;
+
+        // --- Zoom inertia ---
+        if (lastPinchScreenCenter) {
+            const { cx: pinchCx, cy: pinchCy } = screenToComplex(
+                lastPinchScreenCenter.x,
+                lastPinchScreenCenter.y,
+            );
+
+            // Update the zoom based on velocity
+            // e.g. newZoom = oldZoom + zoomVelocity * dt
+            state.zoom += zoomVelocity * dt;
+
+            // Keep pinch center stable => same approach as pinch
+            // We'll compare old vs new pinch center in fractal coords
+            const { cx: newCx, cy: newCy } = screenToComplex(
+                lastPinchScreenCenter.x,
+                lastPinchScreenCenter.y,
+            );
+            state.x -= (newCx - pinchCx);
+            state.y -= (newCy - pinchCy);
+            zoomVelocity *= ZOOM_FRICTION;
+        } else {
+
+        }
+
+        // Stop if velocities are very small
+        const speedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy + zoomVelocity * zoomVelocity;
+        if (speedSq < 1e-14) {
+            velocity.vx = 0;
+            velocity.vy = 0;
+            zoomVelocity = 0;
+            previewAndScheduleFinalRender();
+            return;
+        }
+
+        // Keep animating
+        previewAndScheduleFinalRender();
+        zoomInertiaId = requestAnimationFrame(animate);
+    }
+
+    zoomInertiaId = requestAnimationFrame(animate);
 }
 
 /**
@@ -546,4 +660,8 @@ function updateFlopStats(flop) {
     const flopStr = formatNumber(flop);
 
     el.innerHTML = `${flopStr}FLOP`;
+}
+
+function debug(msg) {
+    document.getElementById("flopStats").innerHTML = msg;
 }
