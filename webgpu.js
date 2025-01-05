@@ -19,80 +19,86 @@ let gpuBindGroup = null;
  * Initialize WebGPU context/pipeline if supported
  */
 export async function initWebGPU() {
-    if (!('gpu' in navigator)) {
-        console.warn('WebGPU not supported in this browser.');
-        return false;
-    }
-
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-        console.warn('Failed to get GPU adapter.');
-        return false;
-    }
-
-    gpuDevice = await adapter.requestDevice();
-    if (!gpuDevice) {
-        console.warn('Failed to request GPU device.');
-        return false;
-    }
-
-    // Create a WebGPU canvas context from our <canvas>
-    gpuContext = canvas.getContext('webgpu');
-    if (!gpuContext) {
-        console.warn('Could not get WebGPU context.');
-        return false;
-    }
-
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    gpuContext.configure({
-        device: gpuDevice,
-        format: format,
-        alphaMode: 'premultiplied'
-    });
-
-    // Create our render pipeline
-    gpuPipeline = gpuDevice.createRenderPipeline({
-        layout: 'auto',
-        vertex: {
-            module: gpuDevice.createShaderModule({
-                code: wgslVertexShader
-            }),
-            entryPoint: 'main'
-        },
-        fragment: {
-            module: gpuDevice.createShaderModule({
-                code: wgslFragmentShader
-            }),
-            entryPoint: 'main',
-            targets: [{ format }]
-        },
-        primitive: {
-            topology: 'triangle-strip',
-            stripIndexFormat: undefined
+    try {
+        if (!('gpu' in navigator)) {
+            console.warn('WebGPU not supported in this browser.');
+            return false;
         }
-    });
 
-    // Create a buffer for the uniform data.
-    // We'll store centerX, centerY, zoom as f64, plus a little padding, plus resolution as f32x2
-    // For simplicity, we just allocate 48 bytes (6 x f64) and only use what we need.
-    // Real code should mind alignment carefully if mixing f64 + f32 in a struct.
-    gpuUniformBuffer = gpuDevice.createBuffer({
-        size: 48, // enough space for 3 f64 + 2 f32 + padding
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+            console.warn('Failed to get GPU adapter.');
+            return false;
+        }
 
-    gpuBindGroup = gpuDevice.createBindGroup({
-        layout: gpuPipeline.getBindGroupLayout(0),
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: gpuUniformBuffer
-                }
+        gpuDevice = await adapter.requestDevice();
+        if (!gpuDevice) {
+            console.warn('Failed to request GPU device.');
+            return false;
+        }
+
+        // Create a WebGPU canvas context from our <canvas>
+        gpuContext = canvas.getContext('webgpu');
+        if (!gpuContext) {
+            console.warn('Could not get WebGPU context.');
+            return false;
+        }
+
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        gpuContext.configure({
+            device: gpuDevice,
+            format: format,
+            alphaMode: 'premultiplied'
+        });
+
+        // Create our render pipeline
+        gpuPipeline = gpuDevice.createRenderPipeline({
+            layout: 'auto',
+            vertex: {
+                module: gpuDevice.createShaderModule({
+                    code: wgslVertexShader
+                }),
+                entryPoint: 'main'
+            },
+            fragment: {
+                module: gpuDevice.createShaderModule({
+                    code: wgslFragmentShader
+                }),
+                entryPoint: 'main',
+                targets: [{ format }]
+            },
+            primitive: {
+                topology: 'triangle-strip',
+                stripIndexFormat: undefined
             }
-        ]
-    });
-    return true;
+        });
+
+        // Create a buffer for the uniform data.
+        // We'll store centerX, centerY, zoom as f64, plus a little padding, plus resolution as f32x2
+        // For simplicity, we just allocate 48 bytes (6 x f64) and only use what we need.
+        // Real code should mind alignment carefully if mixing f64 + f32 in a struct.
+        gpuUniformBuffer = gpuDevice.createBuffer({
+            size: 48, // enough space for 3 f64 + 2 f32 + padding
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        gpuBindGroup = gpuDevice.createBindGroup({
+            layout: gpuPipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: gpuUniformBuffer
+                    }
+                }
+            ]
+        });
+        return true;
+    }
+    catch (error) {
+        console.warn(error);
+        return false;
+    }
 }
 
 /**
@@ -123,9 +129,9 @@ export function renderFractalWebGPU(scale = 1) {
     //
     // This is a simplistic approach. If your device complains about alignment,
     // you may need to add more padding. 
-    const uniformArray = new ArrayBuffer(40); 
-    const f64View      = new Float64Array(uniformArray);
-    const f32View      = new Float32Array(uniformArray);
+    const uniformArray = new ArrayBuffer(40);
+    const f64View = new Float64Array(uniformArray);
+    const f32View = new Float32Array(uniformArray);
 
     f64View[0] = state.x;       // centerX
     f64View[1] = state.y;       // centerY
