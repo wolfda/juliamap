@@ -1,5 +1,12 @@
+export const RenderingEngine = {
+    WEBGPU: 'webgpu',
+    WEBGL: 'webgl',
+    CPU: 'cpu',
+};
+
 // webgpu availability
 let webgpu_available;
+let renderingEngine = null;
 
 // Global state for the viewport
 export let state = {
@@ -12,10 +19,19 @@ export let state = {
 export const canvas = document.getElementById('fractalCanvas');
 export const ctx = canvas.getContext('2d');
 
-export function set_webgpu(new_webgpu_available) {
+export function setWebgpu(new_webgpu_available) {
     webgpu_available = new_webgpu_available;
 }
 
-export function has_webgpu() {
+export function hasWebgpu() {
     return webgpu_available;
 }
+
+export function useRenderingEngine(engine) {
+    renderingEngine = engine;
+}
+
+export function getRenderingEngine() {
+    return renderingEngine;
+}
+

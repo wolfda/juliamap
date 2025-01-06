@@ -1,4 +1,4 @@
-import { canvas, ctx, has_webgpu, state } from "./state.js";
+import { canvas, ctx, getRenderingEngine, state } from "./state.js";
 
 // Workers so we can terminate if user starts a new move
 let currentWorkers = [];
@@ -51,7 +51,7 @@ export function renderFractalCPU(scale = 1) {
 
         // FLOP estimate
         const flop = totalIterations * 6;
-        updateFlopStats(flop);
+        updateFlopStats(flop, getRenderingEngine());
     };
 
     worker.postMessage(workerData);
@@ -60,7 +60,7 @@ export function renderFractalCPU(scale = 1) {
 /**
  * Update the FLOP stats overlay
  */
-function updateFlopStats(flop) {
+function updateFlopStats(flop, renderingEngine) {
     const el = document.getElementById('flopStats');
     if (!el) return;
 
@@ -74,7 +74,6 @@ function updateFlopStats(flop) {
     };
 
     const flopStr = formatNumber(flop);
-    const platform = has_webgpu() ? "webgpu" : "webgl";
 
-    el.innerHTML = `${platform} - ${flopStr}FLOP`;
+    el.innerHTML = `${renderingEngine} - ${flopStr}FLOP`;
 }

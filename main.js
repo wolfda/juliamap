@@ -12,7 +12,7 @@
  */
 
 import { initWebGL, renderFractalWebGL } from "./webgl.js";
-import { canvas, has_webgpu, set_webgpu, state } from "./state.js";
+import { canvas, hasWebgpu, RenderingEngine, setWebgpu, state, useRenderingEngine } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 
@@ -51,7 +51,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     attachEventListeners();
 
     const webgpu_available = await initWebGPU()
-    set_webgpu(webgpu_available);
+    setWebgpu(webgpu_available);
     if (!webgpu_available) {
         console.warn("webgpu not availble, falling back to webgl");
         initWebGL();
@@ -415,10 +415,15 @@ function renderFractal(options = {}) {
     // If "cpu" is true, do CPU rendering; else do WebGL preview
     if (options.cpu) {
         renderFractalCPU(options.scale);
-    } else if (has_webgpu()) {
+        if (options.scale !== 1) {
+            useRenderingEngine(RenderingEngine.CPU);
+        }
+    } else if (hasWebgpu()) {
         renderFractalWebGPU(options.scale);
+        useRenderingEngine(RenderingEngine.WEBGPU);
     } else {
         renderFractalWebGL(options.scale);
+        useRenderingEngine(RenderingEngine.WEBGL);
     }
 }
 
