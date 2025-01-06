@@ -7,6 +7,7 @@ html, body {
   height: 100%;
   width: 100%;
   background: black;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 #fractalCanvas {
@@ -20,11 +21,24 @@ html, body {
 .overlay {
   position: absolute;
   right: 10px;
-  bottom: 10px;
+  top: 10px;
   color: #fff;      /* bright green text */
   background: rgba(0, 0, 0, 0.6);
   padding: 6px 10px;
   font-family: sans-serif;
   font-size: 14px;
   border-radius: 4px;
+}
+
+#github {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  color: grey;
+  text-decoration: none;
+  font-size: 0.875rem
+}
+
+#github:hover {
+  text-decoration: underline;
 }
