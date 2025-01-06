@@ -292,7 +292,7 @@ function startInertia() {
 
             // Update the zoom based on velocity
             // e.g. newZoom = oldZoom + zoomVelocity * dt
-            state.zoom += zoomVelocity * dt;
+            state.zoom = Math.max(state.zoom + zoomVelocity * dt, 1);
 
             // Keep pinch center stable => same approach as pinch
             // We'll compare old vs new pinch center in fractal coords
