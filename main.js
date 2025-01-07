@@ -50,9 +50,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     resizeCanvas();
     attachEventListeners();
 
-    const webgpu_available = await initWebGPU()
-    setWebgpu(webgpu_available);
-    if (!webgpu_available) {
+    const webgpuAvailable = await initWebGPU();
+    setWebgpu(webgpuAvailable);
+    if (!webgpuAvailable) {
         console.warn("webgpu not availble, falling back to webgl");
         initWebGL();
     }
