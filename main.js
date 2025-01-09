@@ -81,6 +81,16 @@ window.addEventListener('resize', () => {
     }, 200);
 });
 
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'd') {
+        // Store the current zoom
+        const originalZoom = state.zoom;
+
+        // 1) Animate from current zoom to 1
+        animateZoomExponent(1, originalZoom, 12000);
+    }
+});
+
 /**
  * Canvas event listeners for panning and zooming
  */
@@ -324,6 +334,72 @@ function startInertia() {
 
     zoomInertiaId = requestAnimationFrame(animate);
 }
+
+/******************************************************
+ * 1. Easing function (easeInOutSine)
+ *    Slower acceleration/deceleration than Quad.
+ ******************************************************/
+function easeInOutSine(t) {
+    // t goes from 0 to 1
+    return 0.5 * (1 - Math.cos(Math.PI * t));
+}
+
+/**
+ * Animate from zoomStart = 2^L_start to zoomEnd = 2^L_end,
+ * by interpolating L in [L_start, L_end].
+ * 
+ * - zoomStart: initial scale factor
+ * - zoomEnd: final scale factor
+ * - duration: animation time in ms
+ * - easingFunc(t): takes t in [0..1], returns eased T
+ */
+function animateZoomExponent(zoomStart, zoomEnd, duration) {
+    return new Promise((resolve) => {
+      let startTime = null;
+  
+      // Convert scale factors to exponents: L = log2(zoom)
+      const L_start = Math.log2(zoomStart);
+      const L_end   = Math.log2(zoomEnd);
+  
+      // Capture the fractal coords of the screen center so we can keep it stable
+      const centerScreen = { 
+        x: canvas.width / 2 / dpr, 
+        y: canvas.height / 2 / dpr 
+      };
+      const { cx: centerCx, cy: centerCy } = screenToComplex(centerScreen.x, centerScreen.y);
+  
+      function step(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        let t = elapsed / duration;
+        if (t > 1) t = 1;  // clamp to 1 at the end
+  
+        // Apply easing to get an eased progress
+        const easedT = easeInOutSine(t);
+  
+        // Interpolate L_current
+        const L_current = L_start + (L_end - L_start) * easedT;
+        // Convert exponent -> actual zoom scale
+        state.zoom = Math.pow(2, L_current);
+  
+        // Keep the same fractal point at the screen center
+        const { cx: newCx, cy: newCy } = screenToComplex(centerScreen.x, centerScreen.y);
+        state.x -= (newCx - centerCx);
+        state.y -= (newCy - centerCy);
+  
+        // Render a quick preview
+        previewAndScheduleFinalRender();
+  
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      }
+  
+      requestAnimationFrame(step);
+    });
+  }
 
 /**
  * Render a quick preview, then schedule a final CPU render.
