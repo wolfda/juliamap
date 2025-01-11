@@ -12,7 +12,7 @@ let renderingEngine = null;
 export let state = {
     x: -0.5,     // real part (center)
     y: 0,        // imaginary part (center)
-    zoom: 1,     // zoom factor
+    scale: 1,    // scale factor
 };
 
 // Canvas references

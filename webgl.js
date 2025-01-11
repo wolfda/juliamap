@@ -37,7 +37,7 @@ export function initWebGL() {
     precision highp float;
 
     uniform vec2 uResolution; // (width, height)
-    uniform vec3 uCenterZoom; // (centerX, centerY, zoom)
+    uniform vec3 uCenterZoom; // (centerX, centerY, scale)
 
     // Use a preprocessor define for iteration limit
     #define MAX_ITER 500
@@ -48,17 +48,17 @@ export function initWebGL() {
 
         float centerX = uCenterZoom.x;
         float centerY = uCenterZoom.y;
-        float zoom    = uCenterZoom.z;
+        float scale   = uCenterZoom.z;
 
         // Flip Y to match the CPU top-down iteration
         float py = uResolution.y - uv.y;
 
-        // Scale = 4 / (width * zoom)
-        float scale = 4.0 / (uResolution.x * zoom);
+        // scaleFactor = 4 / (width * scale)
+        float scaleFactor = 4.0 / (uResolution.x * scale);
 
         // Map uv -> complex plane
-        float x0 = centerX + (uv.x - 0.5 * uResolution.x) * scale;
-        float y0 = centerY - (py - 0.5 * uResolution.y) * scale;
+        float x0 = centerX + (uv.x - 0.5 * uResolution.x) * scaleFactor;
+        float y0 = centerY - (py - 0.5 * uResolution.y) * scaleFactor;
 
         float x = 0.0;
         float y = 0.0;
@@ -161,7 +161,7 @@ export function renderFractalWebGL(scale = 1) {
     // Set uniforms
     gl.useProgram(webGLProgram);
     gl.uniform2f(uResolution, w, h);
-    gl.uniform3f(uCenterZoom, state.x, state.y, state.zoom);
+    gl.uniform3f(uCenterZoom, state.x, state.y, state.scale);
 
     // Clear and draw
     gl.clearColor(0, 0, 0, 1);

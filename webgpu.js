@@ -75,7 +75,7 @@ export async function initWebGPU() {
         });
 
         // Create a buffer for the uniform data.
-        // We'll store centerX, centerY, zoom, plus some padding, plus resolution as f32x2.
+        // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
         gpuUniformBuffer = gpuDevice.createBuffer({
             size: 48, // enough space for 5 f32 + padding
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -134,18 +134,18 @@ export function renderFractalWebGPU(scale = 1) {
     // Layout:
     //   offset 0: centerX (f32)
     //   offset 4: centerY (f32)
-    //   offset 8: zoom    (f32)
+    //   offset 8: scale   (f32)
     //   offset 12: unused/padding (f32) [so next offset is multiple of 16]
     //   offset 16: resolution.x (f32)
     //   offset 20: resolution.y (f32)
     //
-    const uniformArray = new Float32Array(6); // enough for centerX, centerY, zoom, pad, resolution.x, resolution.y
-    uniformArray[0] = state.x;    // centerX
-    uniformArray[1] = state.y;    // centerY
-    uniformArray[2] = state.zoom; // zoom
-    uniformArray[3] = 0.0;        // pad (optional)
-    uniformArray[4] = w;          // resolution.x
-    uniformArray[5] = h;          // resolution.y
+    const uniformArray = new Float32Array(6); // enough for centerX, centerY, scale, pad, resolution.x, resolution.y
+    uniformArray[0] = state.x;     // centerX
+    uniformArray[1] = state.y;     // centerY
+    uniformArray[2] = state.scale; // scale
+    uniformArray[3] = 0.0;         // pad (optional)
+    uniformArray[4] = w;           // resolution.x
+    uniformArray[5] = h;           // resolution.y
 
     gpuDevice.queue.writeBuffer(gpuUniformBuffer, 0, uniformArray);
 
@@ -203,7 +203,7 @@ const wgslFragmentShader = /* wgsl */ `
 struct FractalUniforms {
     centerX   : f32,
     centerY   : f32,
-    zoom      : f32,
+    scale     : f32,
     pad       : f32,          // keep alignment simple if you want a 16-byte boundary
     resolution: vec2<f32>
 };
@@ -220,12 +220,11 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     let width  = u.resolution.x;
     let height = u.resolution.y;
 
-    // scale = 4 / (width * zoom)
-    let scale = 4.0 / (width * u.zoom);
+    let scaleFactor = 4.0 / (width * u.scale);
 
     // Convert from pixel coords -> fractal coords
-    let x0 = u.centerX + (px - 0.5 * width)  * scale;
-    let y0 = u.centerY - (py - 0.5 * height) * scale;
+    let x0 = u.centerX + (px - 0.5 * width)  * scaleFactor;
+    let y0 = u.centerY - (py - 0.5 * height) * scaleFactor;
 
     // Standard Mandelbrot iteration in f32
     var x : f32 = 0.0;

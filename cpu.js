@@ -49,7 +49,7 @@ export function renderFractalCPU(scale = 1) {
             height: h,
             centerX: state.x,
             centerY: state.y,
-            zoom: state.zoom,
+            scale: state.scale,
             startY,
             endY,
         };

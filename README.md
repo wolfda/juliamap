@@ -37,5 +37,5 @@ The rendering can be done with 3 different methods:
 The rendering engin for the current viewport is choosen based on capabilities of the current platform, in the following order:
 
 1. WebGPU if available. This is experimental and not widely available on current browsers
-2. WebGL, down to zoom ~256073x, which is the limit we can render accurate image with 32-bit integers
+2. WebGL, down to zoom 18, which is the limit we can render accurate image with 32-bit integers
 3. CPU for all other cases. While panning and zooming, a low resolution image will first be computed at 1:8 scale, followed by a full resolutation rendering
