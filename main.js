@@ -42,6 +42,9 @@ let initialScale = 1;
 // Debounce/timer for final hi-res render
 let renderTimeoutId = null;
 
+// Debounce/timer for updating URL
+let updateURLTimeoutId = null;
+
 // Device pixel ratio for crisp rendering on high-DPI
 const dpr = window.devicePixelRatio || 1;
 
@@ -293,10 +296,15 @@ function screenToComplex(sx, sy) {
     return { cx, cy };
 }
 
+function updateURL() {
+    clearTimeout(updateURLTimeoutId);
+    updateURLTimeoutId = setTimeout(doUpdateURL, 200);
+}
+
 /**
  * Update the URL with current state
  */
-function updateURL() {
+function doUpdateURL() {
     const params = new URLSearchParams(window.location.search);
     const state = getMapState();
     const zoom = Math.log2(state.scale);

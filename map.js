@@ -146,7 +146,7 @@ export function animate(onMapChange) {
 
     // If speeds are negligible, do nothing
     const speedSq = vx * vx + vy * vy + vs * vs;
-    if (speedSq < 1e-14) {
+    if (speedSq < 1e-6) {
         vx = 0; vy = 0; vs = 0;
         return;
     }
@@ -184,7 +184,7 @@ export function animate(onMapChange) {
 
         // Check velocity
         const speedSq = vx * vx + vy * vy + vs * vs;
-        if (speedSq < 1e-14) {
+        if (speedSq < 1e-6) {
             vx = 0; vy = 0; vs = 0;
             inertiaRequestId = null;
             return;
