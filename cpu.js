@@ -1,4 +1,5 @@
-import { canvas, ctx, getRenderingEngine, state } from "./state.js";
+import { getMapState } from "./map.js";
+import { canvas, ctx, getRenderingEngine } from "./state.js";
 
 // Workers so we can terminate if user starts a new move
 let currentWorkers = [];
@@ -44,12 +45,13 @@ export function renderFractalCPU(scale = 1) {
         // If `startY >= endY`, we skip creating a worker
         if (startY >= endY) break;
 
+        const mapState = getMapState();
         const workerData = {
             width: w,
             height: h,
-            centerX: state.x,
-            centerY: state.y,
-            scale: state.scale,
+            centerX: mapState.x,
+            centerY: mapState.y,
+            scale: mapState.scale,
             startY,
             endY,
         };
