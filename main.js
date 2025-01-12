@@ -17,6 +17,7 @@ import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 
 const MAX_GPU_SCALE = 1 << 18;
+const BITS_PER_DECIMAL = Math.log10(2);
 
 // Keep track of pointer state during panning
 let isDragging = false;
@@ -355,47 +356,47 @@ function easeInOutSine(t) {
  */
 function animateZoom(zoomStart, zoomEnd, duration) {
     return new Promise((resolve) => {
-      let startTime = null;
-    
-      // Capture the fractal coords of the screen center so we can keep it stable
-      const centerScreen = { 
-        x: canvas.width / 2 / dpr, 
-        y: canvas.height / 2 / dpr 
-      };
-      const { cx: centerCx, cy: centerCy } = screenToComplex(centerScreen.x, centerScreen.y);
-  
-      function step(timestamp) {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        let t = elapsed / duration;
-        if (t > 1) t = 1;  // clamp to 1 at the end
-  
-        // Apply easing to get an eased progress
-        const easedT = easeInOutSine(t);
-  
-        // Interpolate L_current
-        const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
-        // Convert exponent -> actual zoom scale
-        state.scale = Math.pow(2, currentZoom);
-  
-        // Keep the same fractal point at the screen center
-        const { cx: newCx, cy: newCy } = screenToComplex(centerScreen.x, centerScreen.y);
-        state.x -= (newCx - centerCx);
-        state.y -= (newCy - centerCy);
-  
-        // Render a quick preview
-        previewAndScheduleFinalRender();
-  
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          resolve();
+        let startTime = null;
+
+        // Capture the fractal coords of the screen center so we can keep it stable
+        const centerScreen = {
+            x: canvas.width / 2 / dpr,
+            y: canvas.height / 2 / dpr
+        };
+        const { cx: centerCx, cy: centerCy } = screenToComplex(centerScreen.x, centerScreen.y);
+
+        function step(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            let t = elapsed / duration;
+            if (t > 1) t = 1;  // clamp to 1 at the end
+
+            // Apply easing to get an eased progress
+            const easedT = easeInOutSine(t);
+
+            // Interpolate L_current
+            const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
+            // Convert exponent -> actual zoom scale
+            state.scale = Math.pow(2, currentZoom);
+
+            // Keep the same fractal point at the screen center
+            const { cx: newCx, cy: newCy } = screenToComplex(centerScreen.x, centerScreen.y);
+            state.x -= (newCx - centerCx);
+            state.y -= (newCy - centerCy);
+
+            // Render a quick preview
+            previewAndScheduleFinalRender();
+
+            if (t < 1) {
+                requestAnimationFrame(step);
+            } else {
+                resolve();
+            }
         }
-      }
-  
-      requestAnimationFrame(step);
+
+        requestAnimationFrame(step);
     });
-  }
+}
 
 /**
  * Render a quick preview, then schedule a final CPU render.
@@ -444,9 +445,14 @@ function screenToComplex(sx, sy) {
  */
 function updateURL() {
     const params = new URLSearchParams(window.location.search);
-    params.set('x', state.x);
-    params.set('y', state.y);
-    params.set('z', Math.log2(state.scale));
+    const zoom = Math.log2(state.scale);
+
+    // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
+    // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
+    const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
+    params.set('x', state.x.toFixed(precision));
+    params.set('y', state.y.toFixed(precision));
+    params.set('z', zoom.toFixed(2));
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, '', newUrl);
