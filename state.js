@@ -8,13 +8,6 @@ export const RenderingEngine = {
 let webgpu_available;
 let renderingEngine = null;
 
-// // Global state for the viewport
-// export let state = {
-//     x: -0.5,     // real part (center)
-//     y: 0,        // imaginary part (center)
-//     scale: 1,    // scale factor
-// };
-
 // Canvas references
 export const canvas = document.getElementById('fractalCanvas');
 export const ctx = canvas.getContext('2d');

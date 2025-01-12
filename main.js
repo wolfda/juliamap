@@ -37,7 +37,7 @@ let lastMousePos = { x: 0, y: 0 };
 // For touch gestures
 let activeTouches = [];
 let initialDistance = 0;
-// let initialScale = state.scale;
+let initialScale = 1;
 
 // Debounce/timer for final hi-res render
 let renderTimeoutId = null;
@@ -210,8 +210,8 @@ function attachEventListeners() {
             const newPos = screenToComplex(touch.clientX, touch.clientY);
 
             // Delta in fractal space
-            const dx = newPos.cx - oldPos.cx;
-            const dy = newPos.cy - oldPos.cy;
+            const dx = oldPos.cx - newPos.cx;
+            const dy = oldPos.cy - newPos.cy;
 
             move(dx, dy);
 
@@ -220,7 +220,7 @@ function attachEventListeners() {
             previewAndScheduleFinalRender();
             updateURL();
         } else if (activeTouches.length === 2) {
-            // Pinch logic in fractal coords
+            // Pinch to zoom
             const dist = getDistance(activeTouches[0], activeTouches[1]);
             const scaleFactor = dist / initialDistance;
 
@@ -228,7 +228,7 @@ function attachEventListeners() {
             const mid = getMidpoint(activeTouches[0], activeTouches[1]);
             const pivot = screenToComplex(mid.x, mid.y);
 
-            scaleBy(scaleFactor);
+            scaleTo(initialScale * scaleFactor);
 
             // Keep pivot point stable => shift center
             const newPivot = screenToComplex(mid.x, mid.y);
