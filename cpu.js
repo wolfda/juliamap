@@ -10,15 +10,21 @@ export function terminateWorkers() {
     currentWorkers = [];
 }
 
+/** 
+ * Try to detect the number of CPU cores
+ * Fallback to 4 if `navigator.hardwareConcurrency` is unavailable
+ */
+function getConcurrency() {
+    return navigator.hardwareConcurrency || 4;
+}
+
 export function renderFractalCPU(scale = 1) {
     terminateWorkers(); // Just to be safe, kill old workers
 
     const w = Math.floor(canvas.width * scale);
     const h = Math.floor(canvas.height * scale);
 
-    // Try to detect the number of CPU cores
-    // Fallback to 4 if `navigator.hardwareConcurrency` is unavailable
-    const concurrency = navigator.hardwareConcurrency || 4;
+    const concurrency = getConcurrency();
 
     // We'll create an offscreen canvas to combine partial results
     const offscreenCanvas = document.createElement("canvas");
@@ -117,6 +123,10 @@ function updateFlopStats(flop, renderingEngine) {
     };
 
     const flopStr = formatNumber(flop);
+    if (renderingEngine == "cpu") {
+        // Include the number of CPUs
+        renderingEngine += "(" + getConcurrency() + ")";
+    }
 
     el.innerHTML = `${renderingEngine} - ${flopStr}FLOP`;
 }
