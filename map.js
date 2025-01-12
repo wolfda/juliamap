@@ -119,6 +119,9 @@ export function scaleBy(factor) {
 
     scale *= factor;
 
+    // Cannot scale down beyond 1
+    scale = Math.max(scale, 1);
+
     if (dt > 0) {
         // vs is how quickly scale is changing, e.g. (factor - 1)/dt
         vs = (factor - 1) / dt;
