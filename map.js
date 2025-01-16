@@ -17,6 +17,7 @@ let y = 0;
 let scale = 1;
 
 // Velocities
+const MIN_VELOCITY = 1e-3;
 let vx = 0;  // Pan velocity in x
 let vy = 0;  // Pan velocity in y
 let vs = 0;  // "scale velocity" for zoom inertia
@@ -146,9 +147,14 @@ export function animate(onMapChange) {
 
     // If speeds are negligible, do nothing
     const speedSq = vx * vx + vy * vy + vs * vs;
-    if (speedSq < 1e-6) {
+    if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
         vx = 0; vy = 0; vs = 0;
         return;
+    }
+
+    // If zoom is animating, cancel panning
+    if (vs > MIN_VELOCITY) {
+        vx = vy = 0;
     }
 
     // We'll track time for each animation frame separately
@@ -184,7 +190,7 @@ export function animate(onMapChange) {
 
         // Check velocity
         const speedSq = vx * vx + vy * vy + vs * vs;
-        if (speedSq < 1e-6) {
+        if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
             vx = 0; vy = 0; vs = 0;
             inertiaRequestId = null;
             return;
