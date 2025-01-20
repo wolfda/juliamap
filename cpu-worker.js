@@ -4,7 +4,7 @@ onmessage = function (e) {
     height,
     centerX,
     centerY,
-    scale,
+    zoom,
     startY,
     endY,
   } = e.data;
@@ -21,7 +21,7 @@ onmessage = function (e) {
   for (let py = startY; py < endY; py++) {
     for (let px = 0; px < width; px++) {
       // Map (px, py) -> complex plane
-      const scaleFactor = 4.0 / (width * scale);
+      const scaleFactor = 4.0 / width * Math.pow(2, -zoom);
       const x0 = centerX + (px - width / 2) * scaleFactor;
       const y0 = centerY - (py - height / 2) * scaleFactor;
 

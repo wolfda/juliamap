@@ -57,7 +57,7 @@ export function renderFractalCPU(scale = 1) {
             height: h,
             centerX: mapState.x,
             centerY: mapState.y,
-            scale: mapState.scale,
+            zoom: mapState.zoom,
             startY,
             endY,
         };

@@ -49,13 +49,13 @@ export function initWebGL() {
 
         float centerX = uCenterZoom.x;
         float centerY = uCenterZoom.y;
-        float scale   = uCenterZoom.z;
+        float zoom    = uCenterZoom.z;
 
         // Flip Y to match the CPU top-down iteration
         float py = uResolution.y - uv.y;
 
         // scaleFactor = 4 / (width * scale)
-        float scaleFactor = 4.0 / (uResolution.x * scale);
+        float scaleFactor = 4.0 / uResolution.x * exp2(-zoom);
 
         // Map uv -> complex plane
         float x0 = centerX + (uv.x - 0.5 * uResolution.x) * scaleFactor;
@@ -163,7 +163,7 @@ export function renderFractalWebGL(scale = 1) {
     const state = getMapState();
     gl.useProgram(webGLProgram);
     gl.uniform2f(uResolution, w, h);
-    gl.uniform3f(uCenterZoom, state.x, state.y, state.scale);
+    gl.uniform3f(uCenterZoom, state.x, state.y, state.zoom);
 
     // Clear and draw
     gl.clearColor(0, 0, 0, 1);

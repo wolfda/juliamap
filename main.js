@@ -20,14 +20,14 @@ import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 import {
     moveTo,
     move,
-    scaleBy,
-    scaleTo,
+    zoomBy,
+    zoomTo,
     stop,
     animate,
     getMapState
 } from "./map.js";
 
-const MAX_GPU_SCALE = 1 << 18;
+const MAX_GPU_ZOOM = 18;
 const BITS_PER_DECIMAL = Math.log10(2);
 
 // Keep track of pointer state during panning
@@ -37,7 +37,7 @@ let lastMousePos = { x: 0, y: 0 };
 // For touch gestures
 let activeTouches = [];
 let initialDistance = 0;
-let initialScale = 1;
+let initialZoom = 0;
 
 // Debounce/timer for final hi-res render
 let renderTimeoutId = null;
@@ -66,8 +66,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Initial render: do a partial render, then schedule a final CPU pass
     const state = getMapState();
-    const scale = state.scale > MAX_GPU_SCALE ? 0.125 : 1;
-    const cpu = state.scale > MAX_GPU_SCALE;
+    const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
+    const cpu = state.zoom > MAX_GPU_ZOOM;
     renderFractal({ cpu, scale });
     renderTimeoutId = setTimeout(() => {
         renderFractal({ cpu: true, scale: 1 });
@@ -80,8 +80,8 @@ window.addEventListener('DOMContentLoaded', async () => {
  */
 window.addEventListener('resize', () => {
     resizeCanvas();
-    const scale = getMapState().scale > MAX_GPU_SCALE ? 0.125 : 1;
-    const cpu = getMapState().scale > MAX_GPU_SCALE;
+    const scale = getMapState().zoom > MAX_GPU_ZOOM ? 0.125 : 1;
+    const cpu = getMapState().zoom > MAX_GPU_ZOOM;
     renderFractal({ cpu, scale });
 
     // Re-render after a short delay
@@ -94,10 +94,10 @@ window.addEventListener('resize', () => {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'd') {
         // Store the current scale
-        const originalScale = Math.log2(getMapState().scale);
+        const originalZoom = getMapState().zoom;
 
         // 1) Animate from current 0 to zoom
-        animateZoom(0, originalScale, 12000);
+        animateZoom(0, originalZoom, 12000);
     }
 });
 
@@ -169,8 +169,8 @@ function attachEventListeners() {
         const pivot = screenToComplex(mouseX, mouseY);
 
         // Zoom factor
-        const scaleFactor = Math.pow(1.1, -e.deltaY / 100);
-        scaleBy(scaleFactor);
+        const dzoom = -e.deltaY * 0.002;
+        zoomBy(dzoom);
 
         // Keep cursor point stable => shift center
         const newPivot = screenToComplex(mouseX, mouseY);
@@ -196,7 +196,7 @@ function attachEventListeners() {
             // Two-finger pinch
             isDragging = false;
             initialDistance = getDistance(activeTouches[0], activeTouches[1]);
-            initialScale = getMapState().scale;
+            initialZoom = getMapState().zoom;
         }
     }, { passive: false });
 
@@ -225,13 +225,13 @@ function attachEventListeners() {
         } else if (activeTouches.length === 2) {
             // Pinch to zoom
             const dist = getDistance(activeTouches[0], activeTouches[1]);
-            const scaleFactor = dist / initialDistance;
+            const dzoom = Math.log2(dist / initialDistance);
 
             // Midpoint in screen coords => pivot
             const mid = getMidpoint(activeTouches[0], activeTouches[1]);
             const pivot = screenToComplex(mid.x, mid.y);
 
-            scaleTo(initialScale * scaleFactor);
+            zoomTo(initialZoom + dzoom);
 
             // Keep pivot point stable => shift center
             const newPivot = screenToComplex(mid.x, mid.y);
@@ -273,8 +273,8 @@ function onMapChange() {
  */
 function previewAndScheduleFinalRender() {
     const state = getMapState();
-    const scale = state.scale > MAX_GPU_SCALE ? 0.125 : 1;
-    const cpu = state.scale > MAX_GPU_SCALE;
+    const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
+    const cpu = state.zoom > MAX_GPU_ZOOM;
     renderFractal({ cpu, scale });
 
     clearTimeout(renderTimeoutId);
@@ -290,7 +290,7 @@ function screenToComplex(sx, sy) {
     const sxDevice = sx * dpr;
     const syDevice = sy * dpr;
     const state = getMapState();
-    const scale = 4 / (canvas.width * state.scale);
+    const scale = 4 / canvas.width * Math.pow(2, -state.zoom);
     const cx = state.x + (sxDevice - canvas.width / 2) * scale;
     const cy = state.y - (syDevice - canvas.height / 2) * scale;
     return { cx, cy };
@@ -307,7 +307,7 @@ function updateURL() {
 function doUpdateURL() {
     const params = new URLSearchParams(window.location.search);
     const state = getMapState();
-    const zoom = Math.log2(state.scale);
+    const zoom = state.zoom;
 
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
@@ -328,8 +328,7 @@ function readStateFromURL() {
     const x = params.has('x') ? parseFloat(params.get('x')) || 0 : 0;
     const y = params.has('y') ? parseFloat(params.get('y')) || 0 : 0;
     const zoom = params.has('z') ? parseFloat(params.get('z')) || 0 : 0;
-    const scale = Math.pow(2, zoom);
-    moveTo(x, y, scale);
+    moveTo(x, y, zoom);
 }
 
 /**
@@ -423,7 +422,7 @@ function animateZoom(zoomStart, zoomEnd, duration) {
             // Interpolate L_current
             const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
             // Convert exponent -> actual zoom scale
-            scaleTo(Math.pow(2, currentZoom));
+            zoomTo(currentZoom);
 
             // Keep the same fractal point at the screen center
             const { cx: newCx, cy: newCy } = screenToComplex(centerScreen.x, centerScreen.y);

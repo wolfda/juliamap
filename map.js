@@ -1,10 +1,10 @@
 // map.js
 // --------------------------------------
 // Responsibilities:
-//  - Store complex coords: x, y, scale
+//  - Store complex coords: x, y, zoom
 //  - Track velocities for pan & zoom
 //  - Animate inertia over time (animate())
-//  - Provide high-level methods like move(), scaleBy(), pinch() 
+//  - Provide high-level methods like move(), zoomBy(), pinch() 
 //    which compute velocity automatically (no dt parameter from outside).
 //  - Provide moveTo() to jump instantly, stop() to clear velocities.
 //
@@ -14,33 +14,33 @@
 
 let x = 0;
 let y = 0;
-let scale = 1;
+let zoom = 0;
 
 // Velocities
 const MIN_VELOCITY = 1e-3;
 let vx = 0;  // Pan velocity in x
 let vy = 0;  // Pan velocity in y
-let vs = 0;  // "scale velocity" for zoom inertia
+let vz = 0;  // "zoom velocity" for zoom inertia
 
 // Internal friction factors
 const PAN_FRICTION = 0.94;
 const ZOOM_FRICTION = 0.95;
 
 // We'll keep a single timestamp to measure time deltas
-// for move(), scaleBy(), pinch() calls.
+// for move(), zoomBy(), pinch() calls.
 let lastUpdateTime = null;
 
 // We track the inertia animation frame id so we can cancel it if needed
 let inertiaRequestId = null;
 
 /**
- * Immediately set the map to a specific location & scale, 
+ * Immediately set the map to a specific location & zoom, 
  * e.g. after reading from the URL.
  */
-export function moveTo(newX, newY, newScale) {
+export function moveTo(newX, newY, newZoom) {
     x = newX;
     y = newY;
-    scale = newScale;
+    zoom = newZoom;
 }
 
 /**
@@ -51,7 +51,7 @@ export function moveTo(newX, newY, newScale) {
 export function stop() {
     vx = 0;
     vy = 0;
-    vs = 0;
+    vz = 0;
     if (inertiaRequestId) {
         cancelAnimationFrame(inertiaRequestId);
         inertiaRequestId = null;
@@ -60,10 +60,10 @@ export function stop() {
 
 /**
  * Returns the current fractal map state. 
- * main.js can use x, y, scale to do rendering or update the URL.
+ * main.js can use x, y, zoom to do rendering or update the URL.
  */
 export function getMapState() {
-    return { x, y, scale };
+    return { x, y, zoom };
 }
 
 /**
@@ -102,35 +102,35 @@ export function move(dx, dy) {
  * Velocity is computed automatically from the time between calls.
  *
  * Typically, you'd want to do "pivot logic" in main.js 
- * by calling move() before/after scaleBy() so as to keep 
+ * by calling move() before/after zoomBy() so as to keep 
  * a certain fractal point stable.
  *
- * @param {number} factor - ratio for new scale (scale *= factor).
+ * @param {number} dzoom - delta zoom.
  */
-export function scaleBy(factor) {
+export function zoomBy(dzoom) {
     const now = performance.now();
     if (lastUpdateTime === null) {
         lastUpdateTime = now;
-        scale *= factor;
+        zoom += dzoom;
         return;
     }
 
     const dt = (now - lastUpdateTime) / 1000;
     lastUpdateTime = now;
 
-    scale *= factor;
+    zoom += dzoom;
 
-    // Cannot scale down beyond 1
-    scale = Math.max(scale, 1);
+    // Cannot zoom down beyond 0
+    zoom = Math.max(zoom, 0);
 
     if (dt > 0) {
-        // vs is how quickly scale is changing, e.g. (factor - 1)/dt
-        vs = (factor - 1) / dt;
+        // vs is how quickly zoom is changing
+        vz = dzoom / dt;
     }
 }
 
-export function scaleTo(newScale) {
-    scaleBy(newScale / scale);
+export function zoomTo(newZoom) {
+    zoomBy(newZoom - zoom);
 }
 
 /**
@@ -138,7 +138,7 @@ export function scaleTo(newScale) {
  * Call this, for example, on mouseup or touchend if you want to 
  * continue panning/zooming with friction.
  *
- * @param {function(x: number, y: number, scale: number)} onMapChange 
+ * @param {function(x: number, y: number, zoom: number)} onMapChange 
  *        Callback that receives the new map state each frame.
  */
 export function animate(onMapChange) {
@@ -146,14 +146,14 @@ export function animate(onMapChange) {
     if (inertiaRequestId) cancelAnimationFrame(inertiaRequestId);
 
     // If speeds are negligible, do nothing
-    const speedSq = vx * vx + vy * vy + vs * vs;
+    const speedSq = vx * vx + vy * vy + vz * vz;
     if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
-        vx = 0; vy = 0; vs = 0;
+        vx = 0; vy = 0; vz = 0;
         return;
     }
 
     // If zoom is animating, cancel panning
-    if (vs > MIN_VELOCITY) {
+    if (vz > MIN_VELOCITY) {
         vx = vy = 0;
     }
 
@@ -171,27 +171,25 @@ export function animate(onMapChange) {
         vx *= PAN_FRICTION;
         vy *= PAN_FRICTION;
 
-        // Zoom with friction (scale velocity)
-        const oldScale = scale;
-        // e.g. scale += scale * vs * dt
-        // or a simpler approach: scale *= (1 + vs*dt)
-        scale = scale + (scale * vs * dt);
+        // Zoom with friction (zoom velocity)
+        const oldZoom = zoom;
+        zoom += vz * dt;
 
-        // If you don't want scale < 1, clamp it
-        if (scale < 1) {
-            scale = 1;
-            vs = 0;
+        // If you don't want zoom < 0, clamp it
+        if (zoom < 0) {
+            zoom = 0;
+            vz = 0;
         }
 
-        vs *= ZOOM_FRICTION;
+        vz *= ZOOM_FRICTION;
 
         // Notify consumer
-        onMapChange(x, y, scale);
+        onMapChange(x, y, zoom);
 
         // Check velocity
-        const speedSq = vx * vx + vy * vy + vs * vs;
+        const speedSq = vx * vx + vy * vy + vz * vz;
         if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
-            vx = 0; vy = 0; vs = 0;
+            vx = 0; vy = 0; vz = 0;
             inertiaRequestId = null;
             return;
         }
