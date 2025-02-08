@@ -65,13 +65,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Initial render: do a partial render, then schedule a final CPU pass
-    const state = getMapState();
-    const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-    const cpu = state.zoom > MAX_GPU_ZOOM;
-    renderFractal({ cpu, scale });
-    renderTimeoutId = setTimeout(() => {
-        renderFractal({ cpu: true, scale: 1 });
-    }, 300);
+    previewAndScheduleFinalRender();
 });
 
 /**
@@ -80,15 +74,7 @@ window.addEventListener('DOMContentLoaded', async () => {
  */
 window.addEventListener('resize', () => {
     resizeCanvas();
-    const scale = getMapState().zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-    const cpu = getMapState().zoom > MAX_GPU_ZOOM;
-    renderFractal({ cpu, scale });
-
-    // Re-render after a short delay
-    clearTimeout(renderTimeoutId);
-    renderTimeoutId = setTimeout(() => {
-        renderFractal({ cpu: true, scale: 1 });
-    }, 200);
+    previewAndScheduleFinalRender();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -144,12 +130,6 @@ function attachEventListeners() {
         if (now - lastRenderTime > RENDER_INTERVAL_MS) {
             previewAndScheduleFinalRender();
             lastRenderTime = now;
-        } else {
-            // Schedule a CPU render soon
-            clearTimeout(renderTimeoutId);
-            renderTimeoutId = setTimeout(() => {
-                renderFractal({ cpu: true, scale: 1 });
-            }, 300);
         }
 
         // Update URL
@@ -278,9 +258,11 @@ function previewAndScheduleFinalRender() {
     renderFractal({ cpu, scale });
 
     clearTimeout(renderTimeoutId);
-    renderTimeoutId = setTimeout(() => {
-        renderFractal({ cpu: true, scale: 1 });
-    }, 300);
+    if (scale < 1) {
+        renderTimeoutId = setTimeout(() => {
+            renderFractal({ cpu: true, scale: 1 });
+        }, 300);
+    }
 }
 
 /**
