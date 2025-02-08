@@ -187,7 +187,7 @@ export function renderFractalWebGPU(scale = 1) {
 }
 
 /* ---------------------------------------------------------
- * WGSL Shaders (unchanged)
+ * WGSL Shaders (updated to model complex numbers as vec2<f32>)
  * --------------------------------------------------------- */
 
 const wgslVertexShader = /* wgsl */ `
@@ -213,6 +213,14 @@ struct FractalUniforms {
 @group(0) @binding(0)
 var<uniform> u : FractalUniforms;
 
+// Function to perform complex square using vec2<f32> to represent complex numbers.
+fn complex_square(a: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        a.x * a.x - a.y * a.y,  // real part
+        2.0 * a.x * a.y           // imaginary part
+    );
+}
+
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     // pixel-based coordinate in f32
@@ -224,24 +232,24 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
 
     let scaleFactor = 4.0 / width * exp2(-u.zoom);
 
-    // Convert from pixel coords -> fractal coords
-    let x0 = u.centerX + (px - 0.5 * width)  * scaleFactor;
-    let y0 = u.centerY - (py - 0.5 * height) * scaleFactor;
+    // Convert from pixel coords -> fractal coordinates
+    // Here we model the fractal coordinate as a complex number (vec2<f32>)
+    let c = vec2<f32>(
+        u.centerX + (px - 0.5 * width)  * scaleFactor,
+        u.centerY - (py - 0.5 * height) * scaleFactor
+    );
 
-    // Standard Mandelbrot iteration in f32
-    var x : f32 = 0.0;
-    var y : f32 = 0.0;
-
+    // Standard Mandelbrot iteration using complex arithmetic
+    var z: vec2<f32> = vec2<f32>(0.0, 0.0);
     let maxIter = 500;
     var escapeValue = maxIter;
 
     for (var i = 0; i < maxIter; i = i + 1) {
-        let x2 = x*x - y*y + x0;
-        let y2 = 2.0 * x*y + y0;
-        x = x2;
-        y = y2;
+        // Compute z = z * z + c, where z * z is computed using complex multiplication.
+        z = complex_square(z) + c;
 
-        if (x*x + y*y > 4.0) {
+        // If the magnitude of z exceeds 2.0 (i.e., dot(z,z) > 4.0), the point escapes.
+        if (dot(z, z) > 4.0) {
             escapeValue = i;
             break;
         }
@@ -252,8 +260,8 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
         // outside => color = (c, c, 1)
-        let c = 1.0 - f32(escapeValue) / f32(maxIter);
-        return vec4f(c, c, 1.0, 1.0);
+        let col = 1.0 - f32(escapeValue) / f32(maxIter);
+        return vec4f(col, col, 1.0, 1.0);
     }
 }
 `;

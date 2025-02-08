@@ -33,7 +33,7 @@ export function initWebGL() {
     }
     `;
 
-    // Fragment shader that matches the CPU coloring & flips Y
+    // Fragment shader that matches the CPU coloring & flips Y, updated to model complex numbers as vec2.
     const fsSource = `
     precision highp float;
 
@@ -42,6 +42,14 @@ export function initWebGL() {
 
     // Use a preprocessor define for iteration limit
     #define MAX_ITER 500
+
+    // Function to perform complex square using vec2<f32> to represent complex numbers.
+    vec2 complex_square(vec2 a) {
+        return vec2(
+            a.x * a.x - a.y * a.y,  // real part
+            2.0 * a.x * a.y           // imaginary part
+        );
+    }
 
     void main() {
         // uv in [0..uResolution]
@@ -58,23 +66,23 @@ export function initWebGL() {
         float scaleFactor = 4.0 / uResolution.x * exp2(-zoom);
 
         // Map uv -> complex plane
-        float x0 = centerX + (uv.x - 0.5 * uResolution.x) * scaleFactor;
-        float y0 = centerY - (py - 0.5 * uResolution.y) * scaleFactor;
+        // Here we model the fractal coordinate as a complex number c (vec2)
+        vec2 c = vec2(
+            centerX + (uv.x - 0.5 * uResolution.x) * scaleFactor,
+            centerY - (py - 0.5 * uResolution.y) * scaleFactor
+        );
 
-        float x = 0.0;
-        float y = 0.0;
-
+        // Standard Mandelbrot iteration using complex arithmetic.
+        vec2 z = vec2(0.0, 0.0);
         int escapeValue = MAX_ITER;
 
         // We'll track how many iterations until we exceed radius 2
         for (int i = 0; i < MAX_ITER; i++) {
-            float x2 = x*x - y*y + x0;
-            float y2 = 2.0 * x * y + y0;
-            x = x2;
-            y = y2;
+            // Compute z = z * z + c using complex multiplication.
+            z = complex_square(z) + c;
 
-            // Once outside the radius, break
-            if (x*x + y*y > 4.0) {
+            // Once outside the radius (|z| > 2), break out of the loop.
+            if (dot(z, z) > 4.0) {
                 escapeValue = i;
                 break;
             }
@@ -87,8 +95,8 @@ export function initWebGL() {
             // Outside => match CPU color
             // CPU does: c = 255 - floor((iter / maxIter)*255); => (c, c, 255)
             // normalized => c = 1.0 - (escapeValue / MAX_ITER) => (c, c, 1.0)
-            float c = 1.0 - float(escapeValue) / float(MAX_ITER);
-            gl_FragColor = vec4(c, c, 1.0, 1.0);
+            float col = 1.0 - float(escapeValue) / float(MAX_ITER);
+            gl_FragColor = vec4(col, col, 1.0, 1.0);
         }
     }
     `;
@@ -119,9 +127,9 @@ export function initWebGL() {
 
     const vertices = new Float32Array([
         -1, -1,
-        1, -1,
-        -1, 1,
-        1, 1
+         1, -1,
+        -1,  1,
+         1,  1
     ]);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(aPosition);

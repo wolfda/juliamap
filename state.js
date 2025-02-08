@@ -27,4 +27,3 @@ export function useRenderingEngine(engine) {
 export function getRenderingEngine() {
     return renderingEngine;
 }
-

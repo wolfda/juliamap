@@ -12,7 +12,7 @@
  */
 
 import { initWebGL, renderFractalWebGL } from "./webgl.js";
-import { canvas, hasWebgpu, RenderingEngine, setWebgpu, useRenderingEngine } from "./state.js";
+import { canvas, getRenderingEngine, hasWebgpu, RenderingEngine, setWebgpu, useRenderingEngine } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 
@@ -342,6 +342,7 @@ function renderFractal(options = {}) {
         renderFractalWebGL(options.scale);
         useRenderingEngine(RenderingEngine.WEBGL);
     }
+    updateRendingEngine();
 }
 
 /**
@@ -426,4 +427,15 @@ function animateZoom(zoomStart, zoomEnd, duration) {
 
 export function debug(msg) {
     document.getElementById("flopStats").innerHTML = msg;
+}
+
+/**
+ * Update the rendering engine overlay
+ */
+function updateRendingEngine() {
+    const el = document.getElementById('flopStats');
+    if (!el) return;
+
+    const renderingEngine = getRenderingEngine();
+    el.innerHTML = `${renderingEngine}`;
 }
