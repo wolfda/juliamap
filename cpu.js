@@ -62,7 +62,7 @@ export function renderFractalCPU(scale = 1) {
             endY,
         };
 
-        const worker = new Worker("cpu-worker.js");
+        const worker = new Worker("cpu-worker.js", { type: "module" });
         currentWorkers.push(worker);
 
         worker.onmessage = (e) => {
@@ -99,6 +99,10 @@ export function renderFractalCPU(scale = 1) {
                 const flop = totalIterationsAll * 6;
                 updateFlopStats(flop, getRenderingEngine());
             }
+        };
+
+        worker.onerror = (e) => {
+            console.error("Worker error:", e.message, "at", e.filename, "line", e.lineno);
         };
 
         // Start the worker

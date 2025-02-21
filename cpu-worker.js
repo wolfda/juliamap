@@ -1,3 +1,5 @@
+import { getEscapeVelocity } from "./julia.js"
+
 onmessage = function (e) {
   const {
     width,
@@ -25,23 +27,10 @@ onmessage = function (e) {
       const x0 = centerX + (px - width / 2) * scaleFactor;
       const y0 = centerY - (py - height / 2) * scaleFactor;
 
-      let x = 0;
-      let y = 0;
-      let iteration = 0;
-      for (iteration = 0; iteration < maxIter; iteration++) {
-        const x2 = x * x - y * y + x0;
-        const y2 = 2.0 * x * y + y0;
-        x = x2;
-        y = y2;
+      let escapeVelocity = getEscapeVelocity(x0, y0, maxIter);
 
-        // If we escape radius > 2, break out
-        if ((x * x + y * y) > 4.0) {
-          break;
-        }
-      }
-
-      // iteration count used => iteration + 1
-      totalIterations += (iteration + 1);
+      // iteration count used => escapeVelocity + 1
+      totalIterations += escapeVelocity + 1;
 
       // Calculate index in this chunk's buffer
       // row offset: (py - startY)

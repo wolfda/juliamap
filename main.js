@@ -253,8 +253,8 @@ function onMapChange() {
  */
 function previewAndScheduleFinalRender() {
     const state = getMapState();
-    const scale = state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-    const cpu = state.zoom > MAX_GPU_ZOOM;
+    const cpu = !hasWebgpu() && state.zoom > MAX_GPU_ZOOM;
+    const scale = cpu && state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
     renderFractal({ cpu, scale });
 
     clearTimeout(renderTimeoutId);
