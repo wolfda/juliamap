@@ -17,24 +17,25 @@ let gpuUniformBuffer = null;
 let gpuReferenceOrbitBuffer = null;
 let gpuBindGroup = null;
 
-const MAX_ITERATIONS = 500; // can increase for deeper zoom if desired
+const MAX_ITERATIONS = 5000; // can increase for deeper zoom if desired
+const DEFAULT_MAX_ITERATIONS = 500;
 
 /**
  * Attempt to find a point in the current view whose orbit does NOT escape quickly.
  * We'll do a simple random search of up to maxSamples tries.
  */
-function findOrbit(centerX, centerY, zoom, width, height, maxSamples = 200) {
+function findOrbit(width, height, maxIter, maxSamples = 200) {
     let bestOrbit = null;
     let sx = 0.5 * width;
     let sy = 0.5 * height;
 
     for (let s = 0; s < maxSamples; s++) {
         const candidate = screenToComplex(sx, sy, width, height);
-        const orbit = { x: sx, y: sy, escapeVelocity: getEscapeVelocity(candidate.cx, candidate.cy, MAX_ITERATIONS) };
+        const orbit = { x: sx, y: sy, escapeVelocity: getEscapeVelocity(candidate.cx, candidate.cy, maxIter) };
         if (bestOrbit === null || orbit.escapeVelocity > bestOrbit.escapeVelocity) {
             bestOrbit = orbit;
         }
-        if (bestOrbit.escapeVelocity === MAX_ITERATIONS) {
+        if (bestOrbit.escapeVelocity === maxIter) {
             break;
         }
         // Next random try
@@ -43,7 +44,7 @@ function findOrbit(centerX, centerY, zoom, width, height, maxSamples = 200) {
     }
 
     const candidate = screenToComplex(bestOrbit.x, bestOrbit.y, width, height);
-    return { x: bestOrbit.x, y: bestOrbit.y, iters: getJuliaSeries(candidate.cx, candidate.cy, MAX_ITERATIONS) }
+    return { x: bestOrbit.x, y: bestOrbit.y, iters: getJuliaSeries(candidate.cx, candidate.cy, maxIter) }
 }
 
 /**
@@ -109,7 +110,7 @@ export async function initWebGPU() {
         // Create a buffer for the uniform data.
         // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
         gpuUniformBuffer = gpuDevice.createBuffer({
-            size: 24,
+            size: 32,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
@@ -149,7 +150,7 @@ export async function initWebGPU() {
 /**
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
-export function renderFractalWebGPU(scale = 1, deep = false) {
+export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS) {
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
         return;
@@ -177,16 +178,17 @@ export function renderFractalWebGPU(scale = 1, deep = false) {
     // 3. Write fractal parameters to GPU
     // ------------------------------------
     const state = getMapState();
-    const orbit = deep ? findOrbit(state.x, state.y, state.zoom, w, h) : undefined;
+    const orbit = deep ? findOrbit(w, h, maxIter) : undefined;
 
-    const uniformArray = new ArrayBuffer(24);
+    const uniformArray = new ArrayBuffer(32);
     const dataView = new DataView(uniformArray);
-    dataView.setUint32(0, deep ? 1 : 0, true);            // use_perturbation
-    dataView.setFloat32(4, state.zoom, true);  // zoom
-    dataView.setFloat32(8, orbit ? orbit.x : state.x, true);     // center
-    dataView.setFloat32(12, orbit ? orbit.y : state.y, true);     // center
-    dataView.setFloat32(16, w, true);           // resolution
-    dataView.setFloat32(20, h, true);           // resolution
+    dataView.setUint32(0, deep ? 1 : 0, true); // use_perturbation
+    dataView.setFloat32(4, state.zoom, true); // zoom
+    dataView.setFloat32(8, orbit ? orbit.x : state.x, true); // center
+    dataView.setFloat32(12, orbit ? orbit.y : state.y, true); // center
+    dataView.setFloat32(16, w, true); // resolution
+    dataView.setFloat32(20, h, true); // resolution
+    dataView.setUint32(24, maxIter, true); // max_iter
 
     gpuDevice.queue.writeBuffer(gpuUniformBuffer, 0, uniformArray);
 
@@ -250,15 +252,14 @@ struct FractalUniforms {
     zoom            : f32,
     center          : vec2<f32>,
     resolution      : vec2<f32>,
+    max_iter        : u32,
 };
-
-const MAX_ITERATIONS : u32 = ${MAX_ITERATIONS};
 
 @group(0) @binding(0)
 var<uniform> u : FractalUniforms;
 
 @group(0) @binding(1)
-var<storage, read> referenceOrbit : array<vec2<f32>, MAX_ITERATIONS>;
+var<storage, read> referenceOrbit : array<vec2<f32>, ${MAX_ITERATIONS}>;
 
 // Function to perform complex square using vec2<f32> to represent complex numbers.
 fn complex_square(a: vec2<f32>) -> vec2<f32> {
@@ -276,9 +277,9 @@ fn complex_mul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
     );
 }
 
-fn get_escape_velocity(c: vec2<f32>) -> u32 {
+fn get_escape_velocity(c: vec2<f32>, max_iter: u32) -> u32 {
     var z: vec2<f32> = vec2<f32>(0.0, 0.0);
-    for (var i = 0u; i < MAX_ITERATIONS; i = i + 1u) {
+    for (var i = 0u; i < max_iter; i = i + 1u) {
         // Compute z = z * z + c, where z * z is computed using complex multiplication.
         z = complex_square(z) + c;
 
@@ -287,15 +288,15 @@ fn get_escape_velocity(c: vec2<f32>) -> u32 {
             return i;
         }
     }
-    return MAX_ITERATIONS;
+    return max_iter;
 }
 
-fn get_escape_velocity_perturb(delta0: vec2<f32>) -> u32 {
-    // We'll do a loop up to MAX_ITERATIONS, reading the reference Xₙ and
+fn get_escape_velocity_perturb(delta0: vec2<f32>, max_iter: u32) -> u32 {
+    // We'll do a loop up to max_iter, reading the reference Xₙ and
     // iterating ∆ₙ = Yₙ - Xₙ.
     var delta = delta0;
 
-    for (var i = 0u; i < MAX_ITERATIONS; i = i + 1u) {
+    for (var i = 0u; i < max_iter; i = i + 1u) {
         let Xn = referenceOrbit[i];
         // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
         delta = complex_mul(2.0 * Xn + delta, delta) + delta0;
@@ -304,12 +305,14 @@ fn get_escape_velocity_perturb(delta0: vec2<f32>) -> u32 {
             return i;
         }
     }
-    return MAX_ITERATIONS;
+    return max_iter;
 }
 
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     let scaleFactor = 4.0 / u.resolution.x * exp2(-u.zoom) * vec2<f32>(1, -1);
+    let max_iter = u.max_iter;
+    // let max_iter = 500u;
 
     // Standard Mandelbrot iteration using complex arithmetic
     var escapeValue = 0u;
@@ -317,20 +320,20 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
         // Convert from pixel coords -> fractal coordinates
         // Here we model the fractal coordinate as a complex number (vec2<f32>)
         let c = u.center + (fragCoord.xy - 0.5 * u.resolution) * scaleFactor;
-        escapeValue = get_escape_velocity(c);
+        escapeValue = get_escape_velocity(c, max_iter);
     } else {
         // The difference from the reference center in the complex plane:
         // ∆₀ = Y₀ - X₀
         let delta0 = (fragCoord.xy - u.center) * scaleFactor;
-        escapeValue = get_escape_velocity_perturb(delta0);
+        escapeValue = get_escape_velocity_perturb(delta0, max_iter);
     }
 
-    if (escapeValue == ${MAX_ITERATIONS}) {
+    if (escapeValue == max_iter) {
         // inside => black
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
         // outside => color = (c, c, 1)
-        let col = 1.0 - f32(escapeValue) / f32(${MAX_ITERATIONS});
+        let col = 1.0 - f32(escapeValue) / f32(max_iter);
         return vec4f(col, col, 1.0, 1.0);
     }
 }

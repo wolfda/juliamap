@@ -33,6 +33,7 @@ const DEFAULT_CENTER = [-0.5, 0];
 
 // Override the renderer
 let renderingEngineOverride = null;
+let maxIterationOverride = null;
 
 // Keep track of pointer state during panning
 let isDragging = false;
@@ -254,12 +255,13 @@ function onMapChange() {
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
     const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
-    renderFractal(renderingEngine, scale);
+    const maxIter = maxIterationOverride || 500;
+    renderFractal(renderingEngine, scale, maxIter);
 
     clearTimeout(renderTimeoutId);
     if (scale < 1) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, 1);
+            renderFractal(renderingEngine, 1, maxIter);
         }, 300);
     }
 }
@@ -290,6 +292,9 @@ function doUpdateURL() {
     if (renderingEngineOverride) {
         params.set("renderer", renderingEngineOverride);
     }
+    if (maxIterationOverride !== null) {
+        params.set("iter", maxIterationOverride);
+    }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", newUrl);
@@ -304,6 +309,7 @@ function readStateFromURL() {
     const y = params.has("y") ? parseFloat(params.get("y")) || DEFAULT_CENTER[1] : DEFAULT_CENTER[1];
     const zoom = params.has("z") ? parseFloat(params.get("z")) || 0 : 0;
     renderingEngineOverride = params.get("renderer");
+    maxIterationOverride = params.has("iter") ? parseInt(params.get("iter")) || null : null;
     moveTo(x, y, zoom);
 }
 
@@ -321,7 +327,7 @@ function resizeCanvas() {
  * Main function to render the fractal (preview or final).
  * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
  */
-function renderFractal(renderingEngine, scale) {
+function renderFractal(renderingEngine, scale, maxIter) {
     terminateWorkers();
     updateRendingEngine(renderingEngine);
 
@@ -335,11 +341,11 @@ function renderFractal(renderingEngine, scale) {
             break;
 
         case RenderingEngine.WEBGPU:
-            renderFractalWebGPU(scale, false);
+            renderFractalWebGPU(scale, false, maxIter);
             break;
 
         case RenderingEngine.WEBGPU_DEEP:
-            renderFractalWebGPU(scale, true);
+            renderFractalWebGPU(scale, true, maxIter);
             break;
     }
 }
