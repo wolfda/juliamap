@@ -108,28 +108,3 @@ export function renderFractalCPU(scale = 1) {
         worker.postMessage(workerData);
     }
 }
-
-/**
- * Update the FLOP stats overlay
- */
-function updateFlopStats(flop, renderingEngine) {
-    const el = document.getElementById('flopStats');
-    if (!el) return;
-
-    // Format big numbers => G, M, K, etc.
-    const formatNumber = (val) => {
-        if (val > 1e12) return (val / 1e12).toFixed(2) + ' T';
-        if (val > 1e9) return (val / 1e9).toFixed(2) + ' G';
-        if (val > 1e6) return (val / 1e6).toFixed(2) + ' M';
-        if (val > 1e3) return (val / 1e3).toFixed(2) + ' K';
-        return val.toFixed(2);
-    };
-
-    const flopStr = formatNumber(flop);
-    if (renderingEngine == "cpu") {
-        // Include the number of CPUs
-        renderingEngine += "(" + getConcurrency() + ")";
-    }
-
-    el.innerHTML = `${renderingEngine} - ${flopStr}FLOP`;
-}

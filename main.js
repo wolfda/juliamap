@@ -54,7 +54,7 @@ const dpr = window.devicePixelRatio || 1;
  * On DOMContentLoaded, read URL state, resize canvas, attach events,
  * init GPU or WebGL, and do an initial render.
  */
-window.addEventListener('DOMContentLoaded', async () => {
+window.addEventListener("DOMContentLoaded", async () => {
     readStateFromURL();
     resizeCanvas();
     attachEventListeners();
@@ -70,13 +70,13 @@ window.addEventListener('DOMContentLoaded', async () => {
  * Listen for window resize, so we can adjust the canvas resolution
  * and re-render the fractal.
  */
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
     resizeCanvas();
     previewAndScheduleFinalRender();
 });
 
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'd') {
+document.addEventListener("keydown", (e) => {
+    if (e.key === "d") {
         // Store the current scale
         const originalZoom = getMapState().zoom;
 
@@ -90,7 +90,7 @@ document.addEventListener('keydown', (e) => {
  */
 function attachEventListeners() {
     // --- Mouse events ---
-    canvas.addEventListener('mousedown', (e) => {
+    canvas.addEventListener("mousedown", (e) => {
         isDragging = true;
         lastMousePos = { x: e.clientX, y: e.clientY };
         // Stop any ongoing inertia so we start fresh
@@ -98,7 +98,7 @@ function attachEventListeners() {
     });
 
     // Mouse up
-    canvas.addEventListener('mouseup', () => {
+    canvas.addEventListener("mouseup", () => {
         isDragging = false;
         // Start inertia
         animate(onMapChange);
@@ -107,7 +107,7 @@ function attachEventListeners() {
     let lastRenderTime = 0;
     const RENDER_INTERVAL_MS = 80; // ~12 fps preview
 
-    canvas.addEventListener('mousemove', (e) => {
+    canvas.addEventListener("mousemove", (e) => {
         if (!isDragging) return;
 
         // Convert oldPos and newPos from screen → fractal coords
@@ -135,7 +135,7 @@ function attachEventListeners() {
     });
 
     // Mouse wheel to zoom
-    canvas.addEventListener('wheel', (e) => {
+    canvas.addEventListener("wheel", (e) => {
         e.preventDefault();
         // Typically, we do pivot logic to zoom around the cursor.
         stop();  // if you don't want old inertia to continue
@@ -160,7 +160,7 @@ function attachEventListeners() {
 
 
     // --- Touch events ---
-    canvas.addEventListener('touchstart', (e) => {
+    canvas.addEventListener("touchstart", (e) => {
         e.preventDefault();
         stop();  // kill inertia if we have a new touch
         activeTouches = Array.from(e.touches);
@@ -178,7 +178,7 @@ function attachEventListeners() {
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => {
+    canvas.addEventListener("touchmove", (e) => {
         e.preventDefault();
         activeTouches = Array.from(e.touches);
 
@@ -220,7 +220,7 @@ function attachEventListeners() {
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchend', (e) => {
+    canvas.addEventListener("touchend", (e) => {
         e.preventDefault();
         activeTouches = Array.from(e.touches);
         if (activeTouches.length === 0) {
@@ -230,7 +230,7 @@ function attachEventListeners() {
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchcancel', (e) => {
+    canvas.addEventListener("touchcancel", (e) => {
         e.preventDefault();
         activeTouches = [];
         isDragging = false;
@@ -291,15 +291,15 @@ function doUpdateURL() {
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
     const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
-    params.set('x', state.x.toFixed(precision));
-    params.set('y', state.y.toFixed(precision));
-    params.set('z', zoom.toFixed(2));
+    params.set("x", state.x.toFixed(precision));
+    params.set("y", state.y.toFixed(precision));
+    params.set("z", zoom.toFixed(2));
     if (renderingEngineOverride) {
-        params.set('renderer', renderingEngineOverride);
+        params.set("renderer", renderingEngineOverride);
     }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState({}, '', newUrl);
+    window.history.replaceState({}, "", newUrl);
 }
 
 /**
@@ -307,10 +307,10 @@ function doUpdateURL() {
  */
 function readStateFromURL() {
     const params = new URLSearchParams(window.location.search);
-    const x = params.has('x') ? parseFloat(params.get('x')) || 0 : 0;
-    const y = params.has('y') ? parseFloat(params.get('y')) || 0 : 0;
-    const zoom = params.has('z') ? parseFloat(params.get('z')) || 0 : 0;
-    renderingEngineOverride = params.get('renderer');
+    const x = params.has("x") ? parseFloat(params.get("x")) || 0 : 0;
+    const y = params.has("y") ? parseFloat(params.get("y")) || 0 : 0;
+    const zoom = params.has("z") ? parseFloat(params.get("z")) || 0 : 0;
+    renderingEngineOverride = params.get("renderer");
     moveTo(x, y, zoom);
 }
 
@@ -320,8 +320,8 @@ function readStateFromURL() {
 function resizeCanvas() {
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
-    canvas.style.width = window.innerWidth + 'px';
-    canvas.style.height = window.innerHeight + 'px';
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
 }
 
 /**
@@ -336,7 +336,7 @@ function renderFractal(renderingEngine, scale) {
         case RenderingEngine.CPU:
             renderFractalCPU(scale);
             break;
-        
+
         case RenderingEngine.WEBGL:
             renderFractalWebGL(scale);
             break;
@@ -439,8 +439,5 @@ export function debug(msg) {
  * Update the rendering engine overlay
  */
 function updateRendingEngine(renderingEngine) {
-    const el = document.getElementById('flopStats');
-    if (!el) return;
-
-    el.innerHTML = `${renderingEngine}`;
+    document.getElementById("flopStats").innerHTML = renderingEngine;
 }

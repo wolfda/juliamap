@@ -49,33 +49,33 @@ function findOrbit(centerX, centerY, zoom, width, height, maxSamples = 200) {
  */
 export async function initWebGPU() {
     try {
-        if (!('gpu' in navigator)) {
-            console.warn('WebGPU not supported in this browser.');
+        if (!("gpu" in navigator)) {
+            console.warn("WebGPU not supported in this browser.");
             return false;
         }
 
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) {
-            console.warn('Failed to get GPU adapter.');
+            console.warn("Failed to get GPU adapter.");
             return false;
         }
 
         gpuDevice = await adapter.requestDevice();
         if (!gpuDevice) {
-            console.warn('Failed to request GPU device.');
+            console.warn("Failed to request GPU device.");
             return false;
         }
 
         // ----------------------------------------------
         // 1. Create a hidden offscreen canvas + context
         // ----------------------------------------------
-        offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.style.display = 'none';
+        offscreenCanvas = document.createElement("canvas");
+        offscreenCanvas.style.display = "none";
         document.body.appendChild(offscreenCanvas);
 
-        offscreenGpuContext = offscreenCanvas.getContext('webgpu');
+        offscreenGpuContext = offscreenCanvas.getContext("webgpu");
         if (!offscreenGpuContext) {
-            console.warn('Could not get WebGPU context for offscreen canvas.');
+            console.warn("Could not get WebGPU context for offscreen canvas.");
             return false;
         }
 
@@ -84,22 +84,22 @@ export async function initWebGPU() {
 
         // Create our render pipeline
         gpuPipeline = gpuDevice.createRenderPipeline({
-            layout: 'auto',
+            layout: "auto",
             vertex: {
                 module: gpuDevice.createShaderModule({
                     code: wgslVertexShader
                 }),
-                entryPoint: 'main'
+                entryPoint: "main"
             },
             fragment: {
                 module: gpuDevice.createShaderModule({
                     code: wgslFragmentShader
                 }),
-                entryPoint: 'main',
+                entryPoint: "main",
                 targets: [{ format }]
             },
             primitive: {
-                topology: 'triangle-strip',
+                topology: "triangle-strip",
                 stripIndexFormat: undefined
             }
         });
@@ -168,7 +168,7 @@ export function renderFractalWebGPU(scale = 1, deep = false) {
     offscreenGpuContext.configure({
         device: gpuDevice,
         format: format,
-        alphaMode: 'premultiplied'
+        alphaMode: "premultiplied"
     });
 
     // ------------------------------------
@@ -202,8 +202,8 @@ export function renderFractalWebGPU(scale = 1, deep = false) {
             {
                 view: renderView,
                 clearValue: { r: 0, g: 0, b: 0, a: 1 },
-                loadOp: 'clear',
-                storeOp: 'store',
+                loadOp: "clear",
+                storeOp: "store",
             },
         ],
     });

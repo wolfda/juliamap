@@ -13,15 +13,15 @@ let webGLProgram = null;
 let uResolution, uCenterZoom;
 
 export function initWebGL() {
-    const webGLCanvas = document.createElement('canvas');
+    const webGLCanvas = document.createElement("canvas");
     webGLCanvas.width = 256;
     webGLCanvas.height = 256;
-    webGLCanvas.style.display = 'none';
+    webGLCanvas.style.display = "none";
     document.body.appendChild(webGLCanvas);
 
-    gl = webGLCanvas.getContext('webgl');
+    gl = webGLCanvas.getContext("webgl");
     if (!gl) {
-        console.warn('WebGL not supported, falling back to CPU for preview.');
+        console.warn("WebGL not supported, falling back to CPU for preview.");
         return false;
     }
 
@@ -110,18 +110,18 @@ export function initWebGL() {
     gl.linkProgram(webGLProgram);
 
     if (!gl.getProgramParameter(webGLProgram, gl.LINK_STATUS)) {
-        console.error('Could not link WebGL program:', gl.getProgramInfoLog(webGLProgram));
+        console.error("Could not link WebGL program:", gl.getProgramInfoLog(webGLProgram));
         return false;
     }
 
     gl.useProgram(webGLProgram);
 
     // Look up uniform locations
-    uResolution = gl.getUniformLocation(webGLProgram, 'uResolution');
-    uCenterZoom = gl.getUniformLocation(webGLProgram, 'uCenterZoom');
+    uResolution = gl.getUniformLocation(webGLProgram, "uResolution");
+    uCenterZoom = gl.getUniformLocation(webGLProgram, "uCenterZoom");
 
     // Setup a full-viewport quad
-    const aPosition = gl.getAttribLocation(webGLProgram, 'aPosition');
+    const aPosition = gl.getAttribLocation(webGLProgram, "aPosition");
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 

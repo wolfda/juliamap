@@ -15,9 +15,9 @@ onmessage = function (e) {
   let totalIterations = 0;
 
   const maxIter = 500;
-  
+
   // Only allocate enough space for the rows we handle
-  const rowsCount = endY - startY; 
+  const rowsCount = endY - startY;
   const imageDataArray = new Uint8ClampedArray(width * rowsCount * 4);
 
   for (let py = startY; py < endY; py++) {
