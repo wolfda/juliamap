@@ -28,6 +28,7 @@ import {
 } from "./map.js";
 
 const BITS_PER_DECIMAL = Math.log10(2);
+const DEFAULT_CENTER = [-0.5, 0];
 
 // Override the renderer
 let renderingEngineOverride = null;
@@ -307,8 +308,8 @@ function doUpdateURL() {
  */
 function readStateFromURL() {
     const params = new URLSearchParams(window.location.search);
-    const x = params.has("x") ? parseFloat(params.get("x")) || 0 : 0;
-    const y = params.has("y") ? parseFloat(params.get("y")) || 0 : 0;
+    const x = params.has("x") ? parseFloat(params.get("x")) || DEFAULT_CENTER[0] : DEFAULT_CENTER[0];
+    const y = params.has("y") ? parseFloat(params.get("y")) || DEFAULT_CENTER[1] : DEFAULT_CENTER[1];
     const zoom = params.has("z") ? parseFloat(params.get("z")) || 0 : 0;
     renderingEngineOverride = params.get("renderer");
     moveTo(x, y, zoom);
