@@ -3,7 +3,7 @@
 // --------------------------------------
 
 import { getEscapeVelocity, getJuliaSeries } from "./julia.js";
-import { getMapState } from "./map.js";
+import { getMapState, screenToComplex } from "./map.js";
 import { canvas, ctx } from "./state.js";
 
 // Offscreen canvas + context
@@ -24,32 +24,26 @@ const MAX_ITERATIONS = 500; // can increase for deeper zoom if desired
  * We'll do a simple random search of up to maxSamples tries.
  */
 function findOrbit(centerX, centerY, zoom, width, height, maxSamples = 200) {
-    const scaleFactor = (4.0 / width) * Math.pow(2.0, -zoom);
     let bestOrbit = null;
-    let sx = 0.5;
-    let sy = 0.5;
+    let sx = 0.5 * width;
+    let sy = 0.5 * height;
 
     for (let s = 0; s < maxSamples; s++) {
-        // Convert pixel coords -> complex plane
-        const candidateX = centerX + (sx - 0.5) * width * scaleFactor;
-        const candidateY = centerY - (sy - 0.5) * height * scaleFactor;
-
-        const orbit = { x: sx * width, y: sy * height, escapeVelocity: getEscapeVelocity(candidateX, candidateY, MAX_ITERATIONS) };
+        const candidate = screenToComplex(sx, sy, width, height);
+        const orbit = { x: sx, y: sy, escapeVelocity: getEscapeVelocity(candidate.cx, candidate.cy, MAX_ITERATIONS) };
         if (bestOrbit === null || orbit.escapeVelocity > bestOrbit.escapeVelocity) {
             bestOrbit = orbit;
         }
         if (bestOrbit.escapeVelocity === MAX_ITERATIONS) {
             break;
         }
-
-        sx = Math.random();
-        sy = Math.random();
+        // Next random try
+        sx = Math.random() * width;
+        sy = Math.random() * height;
     }
 
-    const x = centerX + (bestOrbit.x - 0.5 * width) * scaleFactor;
-    const y = centerY - (bestOrbit.y - 0.5 * height) * scaleFactor;
-
-    return { x: bestOrbit.x, y: bestOrbit.y, iters: getJuliaSeries(x, y, MAX_ITERATIONS) }
+    const candidate = screenToComplex(bestOrbit.x, bestOrbit.y, width, height);
+    return { x: bestOrbit.x, y: bestOrbit.y, iters: getJuliaSeries(candidate.cx, candidate.cy, MAX_ITERATIONS) }
 }
 
 /**

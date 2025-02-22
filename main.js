@@ -15,6 +15,7 @@ import { initWebGL, renderFractalWebGL } from "./webgl.js";
 import { canvas, getDefaultRenderingEngine, RenderingEngine, hasWebgpu, hasWebgl } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
+import { screenToComplex } from "./map.js";
 
 // --- New Imports from map.js (in your refactor) ---
 import {
@@ -112,8 +113,8 @@ function attachEventListeners() {
         if (!isDragging) return;
 
         // Convert oldPos and newPos from screen → fractal coords
-        const oldPos = screenToComplex(lastMousePos.x, lastMousePos.y);
-        const newPos = screenToComplex(e.clientX, e.clientY);
+        const oldPos = canvasToComplex(lastMousePos.x, lastMousePos.y);
+        const newPos = canvasToComplex(e.clientX, e.clientY);
 
         // Delta in fractal coords
         const dx = oldPos.cx - newPos.cx;
@@ -145,14 +146,14 @@ function attachEventListeners() {
         const mouseY = e.clientY;
 
         // Convert mouse coords to complex plane coords
-        const pivot = screenToComplex(mouseX, mouseY);
+        const pivot = canvasToComplex(mouseX, mouseY);
 
         // Zoom factor
         const dzoom = -e.deltaY * 0.002;
         zoomBy(dzoom);
 
         // Keep cursor point stable => shift center
-        const newPivot = screenToComplex(mouseX, mouseY);
+        const newPivot = canvasToComplex(mouseX, mouseY);
         move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
 
         previewAndScheduleFinalRender();
@@ -188,8 +189,8 @@ function attachEventListeners() {
             const touch = activeTouches[0];
             if (!isDragging) return;
 
-            const oldPos = screenToComplex(lastMousePos.x, lastMousePos.y);
-            const newPos = screenToComplex(touch.clientX, touch.clientY);
+            const oldPos = canvasToComplex(lastMousePos.x, lastMousePos.y);
+            const newPos = canvasToComplex(touch.clientX, touch.clientY);
 
             // Delta in fractal space
             const dx = oldPos.cx - newPos.cx;
@@ -208,12 +209,12 @@ function attachEventListeners() {
 
             // Midpoint in screen coords => pivot
             const mid = getMidpoint(activeTouches[0], activeTouches[1]);
-            const pivot = screenToComplex(mid.x, mid.y);
+            const pivot = canvasToComplex(mid.x, mid.y);
 
             zoomTo(initialZoom + dzoom);
 
             // Keep pivot point stable => shift center
-            const newPivot = screenToComplex(mid.x, mid.y);
+            const newPivot = canvasToComplex(mid.x, mid.y);
             move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
 
             previewAndScheduleFinalRender();
@@ -263,17 +264,8 @@ function previewAndScheduleFinalRender() {
     }
 }
 
-/**
- * Convert screen coords to complex plane coords
- */
-function screenToComplex(sx, sy) {
-    const sxDevice = sx * dpr;
-    const syDevice = sy * dpr;
-    const state = getMapState();
-    const scale = 4 / canvas.width * Math.pow(2, -state.zoom);
-    const cx = state.x + (sxDevice - canvas.width / 2) * scale;
-    const cy = state.y - (syDevice - canvas.height / 2) * scale;
-    return { cx, cy };
+function canvasToComplex(sx, sy) {
+    return screenToComplex(sx * dpr, sy * dpr, canvas.width, canvas.height);
 }
 
 function updateURL() {
@@ -398,7 +390,7 @@ function animateZoom(zoomStart, zoomEnd, duration) {
             x: canvas.width / 2 / dpr,
             y: canvas.height / 2 / dpr
         };
-        const { cx: centerCx, cy: centerCy } = screenToComplex(centerScreen.x, centerScreen.y);
+        const { cx: centerCx, cy: centerCy } = canvasToComplex(centerScreen.x, centerScreen.y);
 
         function step(timestamp) {
             if (!startTime) startTime = timestamp;
@@ -415,7 +407,7 @@ function animateZoom(zoomStart, zoomEnd, duration) {
             zoomTo(currentZoom);
 
             // Keep the same fractal point at the screen center
-            const { cx: newCx, cy: newCy } = screenToComplex(centerScreen.x, centerScreen.y);
+            const { cx: newCx, cy: newCy } = canvasToComplex(centerScreen.x, centerScreen.y);
             move(centerCx - newCx, centerCy - newCy);
 
             // Render a quick preview

@@ -67,6 +67,16 @@ export function getMapState() {
 }
 
 /**
+ * Convert screen coords to complex plane coords.
+ */
+export function screenToComplex(sx, sy, width, height) {
+    const scale = 4 / width * Math.pow(2, -zoom);
+    const cx = x + (sx - width * 0.5) * scale;
+    const cy = y - (sy - height * 0.5) * scale;
+    return { cx, cy };
+}
+
+/**
  * Move the map by (dx, dy) in fractal coords. 
  * Velocity is computed automatically from the time between calls.
  *
