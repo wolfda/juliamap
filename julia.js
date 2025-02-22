@@ -21,13 +21,13 @@ export function getEscapeVelocity(x0, y0, maxIter) {
  * Compute the series for the center up to maxIter.
  * We store each Xₙ in a Float32Array as (x, y).
  */
-export function getJuliaSeries(x0, y0, maxIter) {
+export function getJuliaSeries(x0, y0, count) {
     let x = x0;
     let y = y0;
 
-    const points = new Float32Array(2 * maxIter);
+    const points = new Float32Array(2 * count);
 
-    for (let i = 0; i < maxIter; i++) {
+    for (let i = 0; i < count; i++) {
         points[2 * i] = x;
         points[2 * i + 1] = y;
 

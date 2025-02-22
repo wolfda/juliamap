@@ -25,23 +25,31 @@ const MAX_ITERATIONS = 500; // can increase for deeper zoom if desired
  */
 function findOrbit(centerX, centerY, zoom, width, height, maxSamples = 200) {
     const scaleFactor = (4.0 / width) * Math.pow(2.0, -zoom);
+    let bestOrbit = null;
+    let sx = 0.5;
+    let sy = 0.5;
 
     for (let s = 0; s < maxSamples; s++) {
-        const sx = Math.random();
-        const sy = Math.random();
-
         // Convert pixel coords -> complex plane
         const candidateX = centerX + (sx - 0.5) * width * scaleFactor;
         const candidateY = centerY - (sy - 0.5) * height * scaleFactor;
 
-        const iters = getEscapeVelocity(candidateX, candidateY, MAX_ITERATIONS);
-        if (iters >= MAX_ITERATIONS) {
-            return { x: sx * width, y: sy * height, iters: getJuliaSeries(candidateX, candidateY, MAX_ITERATIONS) };
+        const orbit = { x: sx * width, y: sy * height, escapeVelocity: getEscapeVelocity(candidateX, candidateY, MAX_ITERATIONS) };
+        if (bestOrbit === null || orbit.escapeVelocity > bestOrbit.escapeVelocity) {
+            bestOrbit = orbit;
         }
+        if (bestOrbit.escapeVelocity === MAX_ITERATIONS) {
+            break;
+        }
+
+        sx = Math.random();
+        sy = Math.random();
     }
 
-    console.warn("Could not find a 'good' orbit. Fallback to center.");
-    return { x: 0.5 * width, y: 0.5 * height, iters: getJuliaSeries(centerX, centerY, MAX_ITERATIONS) };
+    const x = centerX + (bestOrbit.x - 0.5 * width) * scaleFactor;
+    const y = centerY - (bestOrbit.y - 0.5 * height) * scaleFactor;
+
+    return { x: bestOrbit.x, y: bestOrbit.y, iters: getJuliaSeries(x, y, MAX_ITERATIONS) }
 }
 
 /**
