@@ -1,5 +1,5 @@
 import { getMapState } from "./map.js";
-import { canvas, ctx, getRenderingEngine } from "./state.js";
+import { canvas, ctx } from "./state.js";
 
 // Workers so we can terminate if user starts a new move
 let currentWorkers = [];
@@ -97,7 +97,6 @@ export function renderFractalCPU(scale = 1) {
 
                 // FLOP estimate: totalIterations * 6
                 const flop = totalIterationsAll * 6;
-                updateFlopStats(flop, getRenderingEngine());
             }
         };
 

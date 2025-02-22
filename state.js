@@ -1,29 +1,37 @@
+import { getMapState } from "./map.js";
+
 export const RenderingEngine = {
-    WEBGPU: 'webgpu',
-    WEBGL: 'webgl',
-    CPU: 'cpu',
+    WEBGPU: "webgpu",
+    WEBGPU_DEEP: "webgpu-deep",
+    WEBGL: "webgl",
+    CPU: "cpu",
 };
 
-// webgpu availability
-let webgpu_available;
-let renderingEngine = null;
+const MAX_WEBGL_ZOOM = 18;
+
+// Capabilities
+let webgpuAvailable;
+let webglAvailable;
 
 // Canvas references
-export const canvas = document.getElementById('fractalCanvas');
-export const ctx = canvas.getContext('2d');
+export const canvas = document.getElementById("fractalCanvas");
+export const ctx = canvas.getContext("2d");
 
-export function setWebgpu(new_webgpu_available) {
-    webgpu_available = new_webgpu_available;
+export function hasWebgpu(available) {
+    webgpuAvailable = available;
 }
 
-export function hasWebgpu() {
-    return webgpu_available;
+export function hasWebgl(available) {
+    webglAvailable = available;
 }
 
-export function useRenderingEngine(engine) {
-    renderingEngine = engine;
-}
-
-export function getRenderingEngine() {
-    return renderingEngine;
+export function getDefaultRenderingEngine() {
+    const zoom = getMapState().zoom;
+    if (webgpuAvailable) {
+        return zoom < 16 ? RenderingEngine.WEBGPU : RenderingEngine.WEBGPU_DEEP;
+    } else if (webglAvailable && zoom < MAX_WEBGL_ZOOM) {
+        return RenderingEngine.WEBGL;
+    } else {
+        return RenderingEngine.CPU;
+    }
 }

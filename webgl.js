@@ -22,7 +22,7 @@ export function initWebGL() {
     gl = webGLCanvas.getContext('webgl');
     if (!gl) {
         console.warn('WebGL not supported, falling back to CPU for preview.');
-        return;
+        return false;
     }
 
     // Vertex shader (full-screen quad)
@@ -111,7 +111,7 @@ export function initWebGL() {
 
     if (!gl.getProgramParameter(webGLProgram, gl.LINK_STATUS)) {
         console.error('Could not link WebGL program:', gl.getProgramInfoLog(webGLProgram));
-        return;
+        return false;
     }
 
     gl.useProgram(webGLProgram);
@@ -146,6 +146,8 @@ export function initWebGL() {
         }
         return s;
     }
+
+    return true;
 }
 
 /**
@@ -153,8 +155,7 @@ export function initWebGL() {
  */
 export function renderFractalWebGL(scale = 1) {
     if (!gl) {
-        // WebGL not supported => fallback to CPU
-        renderFractalCPU(scale);
+        console.log("Unsupported webgl");
         return;
     }
 

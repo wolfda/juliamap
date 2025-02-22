@@ -37,7 +37,7 @@ onmessage = function (e) {
       const rowOffset = py - startY;
       const idx = (rowOffset * width + px) * 4;
 
-      if (iteration === maxIter) {
+      if (escapeVelocity === maxIter) {
         // inside
         imageDataArray[idx + 0] = 0;
         imageDataArray[idx + 1] = 0;
@@ -45,7 +45,7 @@ onmessage = function (e) {
         imageDataArray[idx + 3] = 255;
       } else {
         // outside => color
-        const c = 255 - Math.floor((iteration / maxIter) * 255);
+        const c = 255 - Math.floor((escapeVelocity / maxIter) * 255);
         imageDataArray[idx + 0] = c;
         imageDataArray[idx + 1] = c;
         imageDataArray[idx + 2] = 255;

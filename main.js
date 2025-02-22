@@ -12,7 +12,7 @@
  */
 
 import { initWebGL, renderFractalWebGL } from "./webgl.js";
-import { canvas, getRenderingEngine, hasWebgpu, RenderingEngine, setWebgpu, useRenderingEngine } from "./state.js";
+import { canvas, getDefaultRenderingEngine, RenderingEngine, hasWebgpu, hasWebgl } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 
@@ -27,8 +27,10 @@ import {
     getMapState
 } from "./map.js";
 
-const MAX_GPU_ZOOM = 18;
 const BITS_PER_DECIMAL = Math.log10(2);
+
+// Override the renderer
+let renderingEngineOverride = null;
 
 // Keep track of pointer state during panning
 let isDragging = false;
@@ -57,12 +59,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     resizeCanvas();
     attachEventListeners();
 
-    const webgpuAvailable = await initWebGPU();
-    setWebgpu(webgpuAvailable);
-    if (!webgpuAvailable) {
-        console.warn("webgpu not available, falling back to webgl");
-        initWebGL();
-    }
+    hasWebgpu(await initWebGPU());
+    hasWebgl(await initWebGL());
 
     // Initial render: do a partial render, then schedule a final CPU pass
     previewAndScheduleFinalRender();
@@ -252,15 +250,14 @@ function onMapChange() {
  * Render a quick preview, then schedule a final CPU render.
  */
 function previewAndScheduleFinalRender() {
-    const state = getMapState();
-    const cpu = !hasWebgpu() && state.zoom > MAX_GPU_ZOOM;
-    const scale = cpu && state.zoom > MAX_GPU_ZOOM ? 0.125 : 1;
-    renderFractal({ cpu, scale });
+    const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
+    const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
+    renderFractal(renderingEngine, scale);
 
     clearTimeout(renderTimeoutId);
     if (scale < 1) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal({ cpu: true, scale: 1 });
+            renderFractal(renderingEngine, 1);
         }, 300);
     }
 }
@@ -297,6 +294,9 @@ function doUpdateURL() {
     params.set('x', state.x.toFixed(precision));
     params.set('y', state.y.toFixed(precision));
     params.set('z', zoom.toFixed(2));
+    if (renderingEngineOverride) {
+        params.set('renderer', renderingEngineOverride);
+    }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, '', newUrl);
@@ -310,6 +310,7 @@ function readStateFromURL() {
     const x = params.has('x') ? parseFloat(params.get('x')) || 0 : 0;
     const y = params.has('y') ? parseFloat(params.get('y')) || 0 : 0;
     const zoom = params.has('z') ? parseFloat(params.get('z')) || 0 : 0;
+    renderingEngineOverride = params.get('renderer');
     moveTo(x, y, zoom);
 }
 
@@ -327,22 +328,27 @@ function resizeCanvas() {
  * Main function to render the fractal (preview or final).
  * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
  */
-function renderFractal(options = {}) {
+function renderFractal(renderingEngine, scale) {
     terminateWorkers();
+    updateRendingEngine(renderingEngine);
 
-    if (options.cpu) {
-        renderFractalCPU(options.scale);
-        if (options.scale !== 1) {
-            useRenderingEngine(RenderingEngine.CPU);
-        }
-    } else if (hasWebgpu()) {
-        renderFractalWebGPU(options.scale);
-        useRenderingEngine(RenderingEngine.WEBGPU);
-    } else {
-        renderFractalWebGL(options.scale);
-        useRenderingEngine(RenderingEngine.WEBGL);
+    switch (renderingEngine) {
+        case RenderingEngine.CPU:
+            renderFractalCPU(scale);
+            break;
+        
+        case RenderingEngine.WEBGL:
+            renderFractalWebGL(scale);
+            break;
+
+        case RenderingEngine.WEBGPU:
+            renderFractalWebGPU(scale, false);
+            break;
+
+        case RenderingEngine.WEBGPU_DEEP:
+            renderFractalWebGPU(scale, true);
+            break;
     }
-    updateRendingEngine();
 }
 
 /**
@@ -432,10 +438,9 @@ export function debug(msg) {
 /**
  * Update the rendering engine overlay
  */
-function updateRendingEngine() {
+function updateRendingEngine(renderingEngine) {
     const el = document.getElementById('flopStats');
     if (!el) return;
 
-    const renderingEngine = getRenderingEngine();
     el.innerHTML = `${renderingEngine}`;
 }

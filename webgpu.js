@@ -147,7 +147,7 @@ export async function initWebGPU() {
 /**
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
-export function renderFractalWebGPU(scale = 1) {
+export function renderFractalWebGPU(scale = 1, deep = false) {
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
         return;
@@ -175,12 +175,11 @@ export function renderFractalWebGPU(scale = 1) {
     // 3. Write fractal parameters to GPU
     // ------------------------------------
     const state = getMapState();
-    const usePerturbation = state.zoom > 16;
-    const orbit = usePerturbation ? findOrbit(state.x, state.y, state.zoom, w, h) : undefined;
+    const orbit = deep ? findOrbit(state.x, state.y, state.zoom, w, h) : undefined;
 
     const uniformArray = new ArrayBuffer(24);
     const dataView = new DataView(uniformArray);
-    dataView.setUint32(0, usePerturbation ? 1 : 0, true);            // use_perturbation
+    dataView.setUint32(0, deep ? 1 : 0, true);            // use_perturbation
     dataView.setFloat32(4, state.zoom, true);  // zoom
     dataView.setFloat32(8, orbit ? orbit.x : state.x, true);     // center
     dataView.setFloat32(12, orbit ? orbit.y : state.y, true);     // center
