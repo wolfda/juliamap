@@ -255,13 +255,14 @@ function onMapChange() {
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
     const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
+    const restScale = renderingEngine == RenderingEngine.WEBGPU || renderingEngine == RenderingEngine.WEBGPU ? 8 : 1;
     const maxIter = maxIterationOverride || 500;
     renderFractal(renderingEngine, scale, maxIter);
 
     clearTimeout(renderTimeoutId);
-    if (scale < 1) {
+    if (scale !== restScale) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, 1, maxIter);
+            renderFractal(renderingEngine, restScale, maxIter);
         }, 300);
     }
 }
