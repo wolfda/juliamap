@@ -133,6 +133,7 @@ function getPaletteId(palette) {
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
 export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC) {
+    maxIter = Math.min(maxIter, MAX_ITERATIONS);
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
         return;

@@ -250,6 +250,11 @@ function onMapChange() {
     updateURL();
 }
 
+function getDefaultIter() {
+    const zoom = getMapState().zoom;
+    return 200 * (1 + zoom);
+}
+
 /**
  * Render a quick preview, then schedule a final CPU render.
  */
@@ -259,7 +264,7 @@ function previewAndScheduleFinalRender() {
     const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
     const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
     const restScale = isWebGpu ? 8 : 1;
-    const maxIter = maxIterationOverride || 500;
+    const maxIter = maxIterationOverride || getDefaultIter();
     renderFractal(renderingEngine, scale, maxIter, palette);
 
     clearTimeout(renderTimeoutId);
