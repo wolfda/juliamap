@@ -255,7 +255,8 @@ function onMapChange() {
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
     const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
-    const restScale = renderingEngine == RenderingEngine.WEBGPU || renderingEngine == RenderingEngine.WEBGPU ? 8 : 1;
+    const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
+    const restScale = isWebGpu ? 8 : 1;
     const maxIter = maxIterationOverride || 500;
     renderFractal(renderingEngine, scale, maxIter);
 
