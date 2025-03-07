@@ -12,7 +12,7 @@
  */
 
 import { initWebGL, renderFractalWebGL } from "./webgl.js";
-import { canvas, getDefaultRenderingEngine, RenderingEngine, hasWebgpu, hasWebgl } from "./state.js";
+import { canvas, getDefaultRenderingEngine, Palette, RenderingEngine, hasWebgpu, hasWebgl } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 import { screenToComplex } from "./map.js";
@@ -33,6 +33,7 @@ const DEFAULT_CENTER = [-0.5, 0];
 
 // Override the renderer
 let renderingEngineOverride = null;
+let paletteOverride = null;
 let maxIterationOverride = null;
 
 // Keep track of pointer state during panning
@@ -254,16 +255,17 @@ function onMapChange() {
  */
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
+    const palette = paletteOverride || Palette.ELECTRIC;
     const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
     const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
     const restScale = isWebGpu ? 8 : 1;
     const maxIter = maxIterationOverride || 500;
-    renderFractal(renderingEngine, scale, maxIter);
+    renderFractal(renderingEngine, scale, maxIter, palette);
 
     clearTimeout(renderTimeoutId);
     if (scale !== restScale) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, restScale, maxIter);
+            renderFractal(renderingEngine, restScale, maxIter, palette);
         }, 300);
     }
 }
@@ -297,6 +299,9 @@ function doUpdateURL() {
     if (maxIterationOverride !== null) {
         params.set("iter", maxIterationOverride);
     }
+    if (paletteOverride !== null) {
+        params.set("palette", paletteOverride);
+    }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", newUrl);
@@ -311,6 +316,7 @@ function readStateFromURL() {
     const y = params.has("y") ? parseFloat(params.get("y")) || DEFAULT_CENTER[1] : DEFAULT_CENTER[1];
     const zoom = params.has("z") ? parseFloat(params.get("z")) || 0 : 0;
     renderingEngineOverride = params.get("renderer");
+    paletteOverride = params.get("palette");
     maxIterationOverride = params.has("iter") ? parseInt(params.get("iter")) || null : null;
     moveTo(x, y, zoom);
 }
@@ -329,7 +335,7 @@ function resizeCanvas() {
  * Main function to render the fractal (preview or final).
  * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
  */
-function renderFractal(renderingEngine, scale, maxIter) {
+function renderFractal(renderingEngine, scale, maxIter, palette) {
     terminateWorkers();
     updateRendingEngine(renderingEngine);
 
@@ -343,11 +349,11 @@ function renderFractal(renderingEngine, scale, maxIter) {
             break;
 
         case RenderingEngine.WEBGPU:
-            renderFractalWebGPU(scale, false, maxIter);
+            renderFractalWebGPU(scale, false, maxIter, palette);
             break;
 
         case RenderingEngine.WEBGPU_DEEP:
-            renderFractalWebGPU(scale, true, maxIter);
+            renderFractalWebGPU(scale, true, maxIter, palette);
             break;
     }
 }

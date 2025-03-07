@@ -7,6 +7,12 @@ export const RenderingEngine = {
     CPU: "cpu",
 };
 
+export const Palette = {
+    ELECTRIC: "electric",
+    RAINBOW: "rainbow",
+    ZEBRA: "zebra",
+};
+
 const MAX_WEBGL_ZOOM = 18;
 
 // Capabilities

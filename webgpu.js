@@ -1,6 +1,6 @@
 import { Orbit } from "./julia.js";
 import { getMapState } from "./map.js";
-import { canvas, ctx } from "./state.js";
+import { canvas, ctx, Palette } from "./state.js";
 
 // Offscreen canvas + context
 let offscreenCanvas = null;
@@ -79,7 +79,7 @@ export async function initWebGPU() {
         // Create a buffer for the uniform data.
         // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
         gpuUniformBuffer = gpuDevice.createBuffer({
-            size: 32,
+            size: 40,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
@@ -116,10 +116,23 @@ export async function initWebGPU() {
     }
 }
 
+function getPaletteId(palette) {
+    switch (palette) {
+        case Palette.ELECTRIC:
+            return 0;
+        case Palette.RAINBOW:
+            return 1;
+        case Palette.ZEBRA:
+            return 2;
+        default:
+            return 0;
+    }
+}
+
 /**
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
-export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS) {
+export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC) {
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
         return;
@@ -148,7 +161,7 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
     const orbit = deep ? Orbit.searchMaxEscapeVelocity(w, h, maxIter) : undefined;
     const samples = Math.floor(scale);
 
-    const uniformArray = new ArrayBuffer(32);
+    const uniformArray = new ArrayBuffer(36);
     const dataView = new DataView(uniformArray);
     dataView.setUint32(0, deep ? 1 : 0, true);    // usePerturbation
     dataView.setFloat32(4, state.zoom, true);      // zoom
@@ -158,6 +171,7 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
     dataView.setFloat32(20, h, true);              // resolution
     dataView.setUint32(24, maxIter, true);         // maxIter
     dataView.setUint32(28, samples, true)          // samples
+    dataView.setUint32(32, getPaletteId(palette), true) // paletteId
 
     gpuDevice.queue.writeBuffer(gpuUniformBuffer, 0, uniformArray);
 
@@ -222,6 +236,7 @@ struct FractalUniforms {
     resolution     : vec2f,
     maxIter        : u32,
     samples        : u32,
+    paletteId      : u32,
 };
 
 @group(0) @binding(0)
@@ -360,6 +375,10 @@ fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
 
 // --- Rendering functions
 
+const ELECTRIC_PALETTE_ID = 0u;
+const RAINBOW_PALETTE_ID = 1u;
+const ZEBRA_PALETTE_ID = 2u;
+
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
     var escapeValue = 0u;
@@ -371,7 +390,17 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
         escapeValue = getEscapeVelocityPerturb(delta0, maxIter);
     }
 
-    return electricColor(escapeValue, maxIter);
+    switch (u.paletteId) {
+        case RAINBOW_PALETTE_ID: {
+            return rainbowColor(escapeValue, maxIter);
+        }
+        case ZEBRA_PALETTE_ID: {
+            return zebraColor(escapeValue, maxIter);
+        }
+        default: {
+            return electricColor(escapeValue, maxIter); 
+        }
+    }
 }
 
 fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3f {
