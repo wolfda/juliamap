@@ -200,7 +200,7 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
 }
 
 /* ---------------------------------------------------------
- * WGSL Shaders (updated to model complex numbers as vec2<f32>)
+ * WGSL Shaders (updated to model complex numbers as vec2f)
  * --------------------------------------------------------- */
 
 const wgslVertexShader = /* wgsl */ `
@@ -228,7 +228,7 @@ struct FractalUniforms {
 var<uniform> u: FractalUniforms;
 
 @group(0) @binding(1)
-var<storage, read> referenceOrbit: array<vec2<f32>, ${MAX_ITERATIONS}>;
+var<storage, read> referenceOrbit: array<vec2f, ${MAX_ITERATIONS}>;
 
 // --- Math functions
 
@@ -236,7 +236,7 @@ var<storage, read> referenceOrbit: array<vec2<f32>, ${MAX_ITERATIONS}>;
 fn complexSquare(c: vec2f) -> vec2f {
     return vec2f(
         c.x * c.x - c.y * c.y,  // real part
-        2 * c.x * c.y         // imaginary part
+        2 * c.x * c.y           // imaginary part
     );
 }
 
@@ -249,6 +249,7 @@ fn complexMul(c0: vec2f, c1: vec2f) -> vec2f {
 }
 
 var<private> seed: u32 = 123456789u;
+const MAX_U32 = f32(0xffffffffu);
 
 // Compute the next random number, in [0, 1)
 fn rand() -> f32 {
@@ -256,8 +257,7 @@ fn rand() -> f32 {
     seed ^= seed >> 17;
     seed ^= seed << 5;
     // Convert the new seed to a float in the [0, 1) range.
-    // Note: 0xffffffffu is the maximum for u32.
-    return f32(seed) / f32(0xffffffffu);
+    return f32(seed) / MAX_U32;
 }
 
 // Compute the decimal value of a mod b
@@ -358,6 +358,8 @@ fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
     return maxIter;
 }
 
+// --- Rendering functions
+
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
     var escapeValue = 0u;
@@ -385,7 +387,7 @@ fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3
 
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
-    let scaleFactor = 4 / u.resolution.x * exp2(-u.zoom) * vec2<f32>(1, -1);
+    let scaleFactor = 4 / u.resolution.x * exp2(-u.zoom) * vec2f(1, -1);
     if (u.samples == 1) {
         return vec4f(renderOne(fragCoord.xy, scaleFactor), 1);
     } else {
