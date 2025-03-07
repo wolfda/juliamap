@@ -205,12 +205,12 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
 
 const wgslVertexShader = /* wgsl */ `
 @vertex
-fn main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4f {
+fn main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {
     // We'll draw 2 triangles that cover the entire clip space:
     //   vertexIndex: 0,1,2,3 => positions in a strip
-    let x = f32((vertexIndex & 1u) << 1u) - 1.0; // 0->-1, 1->1, 2->-1, 3->1
-    let y = f32((vertexIndex & 2u)) - 1.0;      // 0->-1, 1->-1, 2->1, 3->1
-    return vec4f(x, y, 0.0, 1.0);
+    let x = f32((vertexIndex & 1u) << 1u) - 1; // 0->-1, 1->1, 2->-1, 3->1
+    let y = f32((vertexIndex & 2u)) - 1;       // 0->-1, 1->-1, 2->1, 3->1
+    return vec4f(x, y, 0, 1);
 }
 `;
 
@@ -218,67 +218,39 @@ const wgslFragmentShader = /* wgsl */ `
 struct FractalUniforms {
     usePerturbation: u32,
     zoom           : f32,
-    center         : vec2<f32>,
-    resolution     : vec2<f32>,
+    center         : vec2f,
+    resolution     : vec2f,
     maxIter        : u32,
     samples        : u32,
 };
 
 @group(0) @binding(0)
-var<uniform> u : FractalUniforms;
+var<uniform> u: FractalUniforms;
 
 @group(0) @binding(1)
-var<storage, read> referenceOrbit : array<vec2<f32>, ${MAX_ITERATIONS}>;
+var<storage, read> referenceOrbit: array<vec2<f32>, ${MAX_ITERATIONS}>;
 
-// Function to perform complex square using vec2<f32> to represent complex numbers.
-fn complexSquare(a: vec2<f32>) -> vec2<f32> {
-    return vec2<f32>(
-        a.x * a.x - a.y * a.y,  // real part
-        2.0 * a.x * a.y         // imaginary part
+// --- Math functions
+
+// Compute c² on a complex number.
+fn complexSquare(c: vec2f) -> vec2f {
+    return vec2f(
+        c.x * c.x - c.y * c.y,  // real part
+        2 * c.x * c.y         // imaginary part
     );
 }
 
-// Function to perform complex square using vec2<f32> to represent complex numbers.
-fn complexMul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
-    return vec2<f32>(
-        a.x * b.x - a.y * b.y,  // real part
-        a.x * b.y + a.y * b.x   // imaginary part
+// Compute c₀ x c₁ for 2 complex numbers.
+fn complexMul(c0: vec2f, c1: vec2f) -> vec2f {
+    return vec2f(
+        c0.x * c1.x - c0.y * c1.y,  // real part
+        c0.x * c1.y + c0.y * c1.x   // imaginary part
     );
-}
-
-fn getEscapeVelocity(c: vec2<f32>, maxIter: u32) -> u32 {
-    var z: vec2<f32> = vec2<f32>(0.0, 0.0);
-    for (var i = 0u; i < maxIter; i += 1u) {
-        // Compute z = z² + c, where z² is computed using complex multiplication.
-        z = complexSquare(z) + c;
-
-        // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4.0), the point escapes.
-        if (dot(z, z) > 4.0) {
-            return i;
-        }
-    }
-    return maxIter;
-}
-
-fn getEscapeVelocityPerturb(delta0: vec2<f32>, maxIter: u32) -> u32 {
-    // We'll do a loop up to maxIter, reading the reference Xₙ and
-    // iterating ∆ₙ = Yₙ - Xₙ.
-    var delta = delta0;
-
-    for (var i = 0u; i < maxIter; i += 1u) {
-        let Xn = referenceOrbit[i];
-        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
-        delta = complexMul(2.0 * Xn + delta, delta) + delta0;
-
-        if (dot(delta, delta) > 4.0) {
-            return i;
-        }
-    }
-    return maxIter;
 }
 
 var<private> seed: u32 = 123456789u;
 
+// Compute the next random number, in [0, 1)
 fn rand() -> f32 {
     seed ^= seed << 13;
     seed ^= seed >> 17;
@@ -288,7 +260,105 @@ fn rand() -> f32 {
     return f32(seed) / f32(0xffffffffu);
 }
 
-fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec4f {
+// Compute the decimal value of a mod b
+fn fmod(a: f32, b: f32) -> f32 {
+    return a - b * floor(a / b);
+}
+
+// --- Color functions
+
+const RED = vec3f(1, 0, 0);
+const YELLOW = vec3f(1, 1, 0);
+const GREEN = vec3f(0, 1, 0);
+const CYAN = vec3f(0, 1, 1);
+const BLUE = vec3f(0, 0, 1);
+const MAGENTA = vec3f(1, 0, 1);
+const BLACK = vec3f(0, 0, 0);
+const WHITE = vec3f(1, 1, 1);
+
+const ELECTRIC = array<vec3f, 2>(BLUE, WHITE);
+const RAINBOW = array<vec3f, 6>(YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED);
+const ZEBRA = array<vec3f, 2>(WHITE, BLACK);
+
+fn interpolatePalette6Color(palette: array<vec3f, 6>, index: f32) -> vec3f {
+    let len = 6.0;
+    let c0 = palette[u32(fmod(len * index - 1, len))];
+    let c1 = palette[u32(fmod(len * index, len))];
+    let t = fmod(len * index, 1);
+    return c0 + t * (c1 - c0);
+}
+
+fn interpolatePalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
+    let len = 2.0;
+    let c0 = palette[u32(fmod(len * index - 1, len))];
+    let c1 = palette[u32(fmod(len * index, len))];
+    let t = fmod(len * index, 1);
+    return c0 + t * (c1 - c0);
+}
+
+fn getPalette6Color(palette: array<vec3f, 6>, index: f32) -> vec3f {
+    return palette[u32(fmod(index, 1) * 6)];
+}
+
+fn getPalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
+    return palette[u32(fmod(index, 1) * 2)];
+}
+
+// --- Julia functions
+
+fn rainbowColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
+    if (escapeVelocity == maxIter) {
+        return BLACK;
+    }
+    return interpolatePalette6Color(RAINBOW, f32(escapeVelocity) / f32(maxIter));
+}
+
+fn electricColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
+    if (escapeVelocity == maxIter) {
+        return BLACK;
+    }
+    return interpolatePalette2Color(ELECTRIC, 0.5 * f32(escapeVelocity) / f32(maxIter));
+}
+
+fn zebraColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
+    if (escapeVelocity == maxIter) {
+        return BLACK;
+    }
+    return getPalette2Color(ZEBRA, f32(escapeVelocity) / f32(maxIter) * 100);
+}
+
+fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
+    var z = vec2f(0);
+    for (var i = 0u; i < maxIter; i += 1u) {
+        // Compute z = z² + c, where z² is computed using complex multiplication.
+        z = complexSquare(z) + c;
+
+        // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4), the point escapes.
+        if (dot(z, z) > 4) {
+            return i;
+        }
+    }
+    return maxIter;
+}
+
+fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
+    // We'll do a loop up to maxIter, reading the reference Xₙ and
+    // iterating ∆ₙ = Yₙ - Xₙ.
+    var delta = delta0;
+
+    for (var i = 0u; i < maxIter; i += 1u) {
+        let Xn = referenceOrbit[i];
+        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
+        delta = complexMul(2 * Xn + delta, delta) + delta0;
+
+        if (dot(delta, delta) > 4) {
+            return i;
+        }
+    }
+    return maxIter;
+}
+
+fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
     var escapeValue = 0u;
     if u.usePerturbation == 0 {
@@ -299,18 +369,11 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec4f {
         escapeValue = getEscapeVelocityPerturb(delta0, maxIter);
     }
 
-    if (escapeValue == maxIter) {
-        // inside => black
-        return vec4f(0.0, 0.0, 0.0, 1.0);
-    } else {
-        // outside => color = (c, c, 1)
-        let col = 1.0 - f32(escapeValue) / f32(maxIter);
-        return vec4f(col, col, 1.0, 1.0);
-    }
+    return electricColor(escapeValue, maxIter);
 }
 
-fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec4f {
-    var color = vec4f(0.0);
+fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3f {
+    var color = vec3f(0);
     for (var i = 0u; i < samples; i += 1u) {
         // Add a random jitter in [-0.5, 0.5] to compute the value of the next sample.
         let jitter = vec2f(rand() - 0.5, rand() - 0.5);
@@ -322,11 +385,11 @@ fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec4
 
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
-    let scaleFactor = 4.0 / u.resolution.x * exp2(-u.zoom) * vec2<f32>(1, -1);
+    let scaleFactor = 4 / u.resolution.x * exp2(-u.zoom) * vec2<f32>(1, -1);
     if (u.samples == 1) {
-        return renderOne(fragCoord.xy, scaleFactor);
+        return vec4f(renderOne(fragCoord.xy, scaleFactor), 1);
     } else {
-        return renderSuperSample(fragCoord.xy, scaleFactor, u.samples);
+        return vec4f(renderSuperSample(fragCoord.xy, scaleFactor, u.samples), 1);
     }
 }
 `;
