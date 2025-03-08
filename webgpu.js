@@ -132,7 +132,7 @@ function getPaletteId(palette) {
 /**
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
-export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC) {
+export function renderFractalWebGPU(pixelDensity = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC) {
     maxIter = Math.min(maxIter, MAX_ITERATIONS);
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
@@ -142,8 +142,9 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
     // ------------------------------------
     // 2. Configure our offscreen canvas
     // ------------------------------------
-    const w = Math.floor(canvas.width);
-    const h = Math.floor(canvas.height);
+    const scale = Math.min(pixelDensity, 1);
+    const w = Math.floor(canvas.width * scale);
+    const h = Math.floor(canvas.height * scale);
 
     offscreenCanvas.width = w;
     offscreenCanvas.height = h;
@@ -160,7 +161,7 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
     // ------------------------------------
     const state = getMapState();
     const orbit = deep ? Orbit.searchMaxEscapeVelocity(w, h, maxIter) : undefined;
-    const samples = Math.floor(scale);
+    const samples = Math.floor(Math.max(pixelDensity, 1));
 
     const uniformArray = new ArrayBuffer(36);
     const dataView = new DataView(uniformArray);
@@ -210,6 +211,7 @@ export function renderFractalWebGPU(scale = 1, deep = false, maxIter = DEFAULT_M
     // Use the main canvas's 2D context to draw the offscreen image:
     // If you want a simple "centered" or "fit" approach, you can do:
     ctx.save();
+    ctx.scale(1 / scale, 1 / scale);
     ctx.drawImage(offscreenCanvas, 0, 0);
     ctx.restore();
 }

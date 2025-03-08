@@ -153,12 +153,13 @@ export function initWebGL() {
 /**
  * Render using WebGL, then up-scale
  */
-export function renderFractalWebGL(scale = 1) {
+export function renderFractalWebGL(pixelDensity = 1) {
     if (!gl) {
         console.log("Unsupported webgl");
         return;
     }
 
+    const scale = Math.min(pixelDensity, 1);
     const offscreenCanvas = gl.canvas;
 
     const w = Math.floor(canvas.width * scale);

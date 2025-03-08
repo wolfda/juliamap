@@ -261,16 +261,16 @@ function getDefaultIter() {
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
     const palette = paletteOverride || Palette.ELECTRIC;
-    const scale = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
+    const pixelDensity = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
     const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
-    const restScale = isWebGpu ? 8 : 1;
+    const restPixelDensity = isWebGpu ? 8 : 1;
     const maxIter = maxIterationOverride || getDefaultIter();
-    renderFractal(renderingEngine, scale, maxIter, palette);
+    renderFractal(renderingEngine, pixelDensity, maxIter, palette);
 
     clearTimeout(renderTimeoutId);
-    if (scale !== restScale) {
+    if (pixelDensity !== restPixelDensity) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, restScale, maxIter, palette);
+            renderFractal(renderingEngine, restPixelDensity, maxIter, palette);
         }, 300);
     }
 }
@@ -340,25 +340,25 @@ function resizeCanvas() {
  * Main function to render the fractal (preview or final).
  * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
  */
-function renderFractal(renderingEngine, scale, maxIter, palette) {
+function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
     terminateWorkers();
     updateRendingEngine(renderingEngine);
 
     switch (renderingEngine) {
         case RenderingEngine.CPU:
-            renderFractalCPU(scale);
+            renderFractalCPU(pixelDensity);
             break;
 
         case RenderingEngine.WEBGL:
-            renderFractalWebGL(scale);
+            renderFractalWebGL(pixelDensity);
             break;
 
         case RenderingEngine.WEBGPU:
-            renderFractalWebGPU(scale, false, maxIter, palette);
+            renderFractalWebGPU(pixelDensity, false, maxIter, palette);
             break;
 
         case RenderingEngine.WEBGPU_DEEP:
-            renderFractalWebGPU(scale, true, maxIter, palette);
+            renderFractalWebGPU(pixelDensity, true, maxIter, palette);
             break;
     }
 }

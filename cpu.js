@@ -18,9 +18,10 @@ function getConcurrency() {
     return navigator.hardwareConcurrency || 4;
 }
 
-export function renderFractalCPU(scale = 1) {
+export function renderFractalCPU(pixelDensity = 1) {
     terminateWorkers(); // Just to be safe, kill old workers
 
+    const scale = Math.min(pixelDensity, 1);
     const w = Math.floor(canvas.width * scale);
     const h = Math.floor(canvas.height * scale);
 
