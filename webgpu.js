@@ -322,25 +322,16 @@ fn getPalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
 
 // --- Julia functions
 
-fn rainbowColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
-    if (escapeVelocity == maxIter) {
-        return BLACK;
-    }
-    return interpolatePalette6Color(RAINBOW, f32(escapeVelocity) / f32(maxIter));
+fn rainbowColor(escapeVelocity: u32) -> vec3f {
+    return interpolatePalette6Color(RAINBOW, f32(escapeVelocity) / 200);
 }
 
-fn electricColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
-    if (escapeVelocity == maxIter) {
-        return BLACK;
-    }
-    return interpolatePalette2Color(ELECTRIC, 0.5 * f32(escapeVelocity) / f32(maxIter));
+fn electricColor(escapeVelocity: u32) -> vec3f {
+    return interpolatePalette2Color(ELECTRIC, f32(escapeVelocity) / 200);
 }
 
-fn zebraColor(escapeVelocity: u32, maxIter: u32) -> vec3f {
-    if (escapeVelocity == maxIter) {
-        return BLACK;
-    }
-    return getPalette2Color(ZEBRA, f32(escapeVelocity) / f32(maxIter) * 100);
+fn zebraColor(escapeVelocity: u32) -> vec3f {
+    return getPalette2Color(ZEBRA, f32(escapeVelocity) / 5);
 }
 
 fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
@@ -382,24 +373,27 @@ const ZEBRA_PALETTE_ID = 2u;
 
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
-    var escapeValue = 0u;
+    var escapeVelocity = 0u;
     if u.usePerturbation == 0 {
         let c = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
-        escapeValue = getEscapeVelocity(c, maxIter);
+        escapeVelocity = getEscapeVelocity(c, maxIter);
     } else {
         let delta0 = (fragCoord - u.center) * scaleFactor;
-        escapeValue = getEscapeVelocityPerturb(delta0, maxIter);
+        escapeVelocity = getEscapeVelocityPerturb(delta0, maxIter);
     }
 
+    if (escapeVelocity == maxIter) {
+        return BLACK;
+    }
     switch (u.paletteId) {
         case RAINBOW_PALETTE_ID: {
-            return rainbowColor(escapeValue, maxIter);
+            return rainbowColor(escapeVelocity);
         }
         case ZEBRA_PALETTE_ID: {
-            return zebraColor(escapeValue, maxIter);
+            return zebraColor(escapeVelocity);
         }
         default: {
-            return electricColor(escapeValue, maxIter); 
+            return electricColor(escapeVelocity); 
         }
     }
 }
@@ -418,6 +412,7 @@ fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     let scaleFactor = 4 / u.resolution.x * exp2(-u.zoom) * vec2f(1, -1);
+    // return vec4f(interpolatePalette6Color(RAINBOW, fragCoord.xy.x / u.resolution.x + 0.5), 1);
     if (u.samples == 1) {
         return vec4f(renderOne(fragCoord.xy, scaleFactor), 1);
     } else {
