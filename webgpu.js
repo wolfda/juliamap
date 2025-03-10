@@ -253,6 +253,11 @@ fn complexMul(c0: vec2f, c1: vec2f) -> vec2f {
     );
 }
 
+// Compute |c|², the square of the modulus of a complex number.
+fn complexSquareMod(c: vec2f) -> f32 {
+    return dot(c, c);
+}
+
 var<private> seed: u32 = 123456789u;
 const MAX_U32 = f32(0xffffffffu);
 
@@ -330,7 +335,7 @@ fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
         z = complexSquare(z) + c;
 
         // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4), the point escapes.
-        if (dot(z, z) > 4) {
+        if (complexSquareMod(z) > 4) {
             return i;
         }
     }
@@ -341,13 +346,14 @@ fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
     // iterating ∆ₙ = Yₙ - Xₙ.
     var delta = delta0;
+    var Xn = referenceOrbit[0];
 
     for (var i = 0u; i < maxIter; i += 1u) {
-        let Xn = referenceOrbit[i];
         // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
         delta = complexMul(2 * Xn + delta, delta) + delta0;
+        Xn = referenceOrbit[i + 1];
 
-        if (dot(delta, delta) > 4) {
+        if (complexSquareMod(Xn + delta) > 4) {
             return i;
         }
     }

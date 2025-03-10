@@ -201,12 +201,16 @@ uniform int uOrbitCount;       // number of orbit points stored
 
 // --- Math functions
 
-vec2 complex_square(vec2 a) {
-    return vec2(a.x * a.x - a.y * a.y, 2.0 * a.x * a.y);
+vec2 complex_square(vec2 c) {
+    return vec2(c.x * c.x - c.y * c.y, 2.0 * c.x * c.y);
 }
 
-vec2 complex_mul(vec2 a, vec2 b) {
-    return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+vec2 complex_mul(vec2 c0, vec2 c1) {
+    return vec2(c0.x * c1.x - c0.y * c1.y, c0.x * c1.y + c0.y * c1.x);
+}
+
+float complex_square_mod(vec2 c) {
+    return dot(c, c);
 }
 
 // Pseudo-random function based on input vector
@@ -308,8 +312,11 @@ int getEscapeVelocity(vec2 c) {
         if (i >= uMaxIter) {
             break;
         }
+        // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complex_square(z) + c;
-        if (dot(z, z) > 4.0) {
+
+        // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4), the point escapes.
+        if (complex_square_mod(z) > 4.0) {
             return i;
         }
     }
@@ -317,14 +324,20 @@ int getEscapeVelocity(vec2 c) {
 }
 
 int getEscapeVelocityPerturb(vec2 delta0) {
+    // We'll do a loop up to maxIter, reading the reference Xₙ and
+    // iterating ∆ₙ = Yₙ - Xₙ.
     vec2 delta = delta0;
+    vec2 Xn = getOrbitPoint(0);
+
     for (int i = 0; i < MAX_REF_ORBIT; i++) {
         if (i >= uMaxIter) {
             break;
         }
-        vec2 Xn = getOrbitPoint(i);
+        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
         delta = complex_mul(2.0 * Xn + delta, delta) + delta0;
-        if (dot(delta, delta) > 4.0) {
+        Xn = getOrbitPoint(i + 1);
+
+        if (complex_square_mod(Xn + delta) > 4.0) {
             return i;
         }
     }
