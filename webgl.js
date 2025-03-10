@@ -221,14 +221,14 @@ float rand(vec2 co) {
 // --- Color functions
 
 // Color definitions
-const vec3 RED     = vec3(1.0, 0.0, 0.0);
-const vec3 YELLOW  = vec3(1.0, 1.0, 0.0);
-const vec3 GREEN   = vec3(0.0, 1.0, 0.0);
-const vec3 CYAN    = vec3(0.0, 1.0, 1.0);
-const vec3 BLUE    = vec3(0.0, 0.0, 1.0);
-const vec3 MAGENTA = vec3(1.0, 0.0, 1.0);
-const vec3 BLACK   = vec3(0.0, 0.0, 0.0);
-const vec3 WHITE   = vec3(1.0, 1.0, 1.0);
+const vec3 RED     = vec3(1, 0, 0);
+const vec3 YELLOW  = vec3(1, 1, 0);
+const vec3 GREEN   = vec3(0, 1, 0);
+const vec3 CYAN    = vec3(0, 1, 1);
+const vec3 BLUE    = vec3(0, 0, 1);
+const vec3 MAGENTA = vec3(1, 0, 1);
+const vec3 BLACK   = vec3(0, 0, 0);
+const vec3 WHITE   = vec3(1, 1, 1);
 
 // Electric palette: BLUE to WHITE
 const vec3 ELECTRIC0 = BLUE;
@@ -238,9 +238,14 @@ const vec3 ELECTRIC1 = WHITE;
 const vec3 ZEBRA0 = WHITE;
 const vec3 ZEBRA1 = BLACK;
 
+// Same color palette as used on the Wikipedia page: https://en.wikipedia.org/wiki/Mandelbrot_set
+const vec3 WIKI0 = vec3(  0,   7, 100) / 255.0;
+const vec3 WIKI1 = vec3( 32, 107, 203) / 255.0;
+const vec3 WIKI2 = vec3(237, 255, 255) / 255.0;
+const vec3 WIKI3 = vec3(255, 170,   0) / 255.0;
+const vec3 WIKI4 = vec3(  0,   2,   0) / 255.0;
+
 // Helper function for rainbow palette.
-// GLSL ES 1.00 doesn't support array constructors,
-// so we use a function to return the color at a given index.
 vec3 getRainbowColorAtIndex(int index) {
     if (index == 0) return YELLOW;
     else if (index == 1) return GREEN;
@@ -251,7 +256,7 @@ vec3 getRainbowColorAtIndex(int index) {
 }
 
 // Interpolates between two rainbow palette colors based on index.
-vec3 interpolatePalette6Color(float index) {
+vec3 interpolateRainbowPalette(float index) {
     float len = 6.0;
     float pos = len * index;
     int idx0 = int(mod(pos - 1.0, len));
@@ -259,13 +264,31 @@ vec3 interpolatePalette6Color(float index) {
     return mix(getRainbowColorAtIndex(idx0), getRainbowColorAtIndex(idx1), fract(pos));
 }
 
-vec3 interpolatePalette2Color(float index, vec3 color0, vec3 color1) {
+// Helper function for wikipedia palette.
+vec3 getWikipediaColorAtIndex(int index) {
+    if (index == 0) return WIKI0;
+    else if (index == 1) return WIKI1;
+    else if (index == 2) return WIKI2;
+    else if (index == 3) return WIKI3;
+    else return WIKI4; // index == 4
+}
+
+// Interpolates between two wikipedia palette colors based on index.
+vec3 interpolateWikipediaPalette(float index) {
+    float len = 5.0;
+    float pos = len * index;
+    int idx0 = int(mod(pos - 1.0, len));
+    int idx1 = int(mod(pos, len));
+    return mix(getWikipediaColorAtIndex(idx0), getWikipediaColorAtIndex(idx1), fract(pos));
+}
+
+vec3 interpolateElectricPalette(float index) {
     float len = 2.0;
     float pos = len * index;
     int idx0 = int(mod(pos - 1.0, len));
     int idx1 = int(mod(pos, len));
-    vec3 colorFrom = idx0 == 0 ? color0 : color1;
-    vec3 colorTo = idx1 == 0 ? color0 : color1;
+    vec3 colorFrom = idx0 == 0 ? ELECTRIC0 : ELECTRIC1;
+    vec3 colorTo = idx1 == 0 ? ELECTRIC0 : ELECTRIC1;
     return mix(colorFrom, colorTo, fract(pos));
 }
 
@@ -273,18 +296,24 @@ vec3 interpolatePalette2Color(float index, vec3 color0, vec3 color1) {
 
 vec3 electricColor(int escapeVelocity) {
     float t = float(escapeVelocity) / 200.0;
-    return interpolatePalette2Color(t, ELECTRIC0, ELECTRIC1);
+    return interpolateElectricPalette(t);
 }
 
 vec3 rainbowColor(int escapeVelocity) {
     float index = float(escapeVelocity) / 200.0;
-    return interpolatePalette6Color(index);
+    return interpolateRainbowPalette(index);
 }
 
 vec3 zebraColor(int escapeVelocity) {
     float index = float(escapeVelocity) / 5.0;
     float modIndex = mod(index, 1.0);
     return int(modIndex * 2.0) == 0 ? ZEBRA0 : ZEBRA1;
+}
+
+vec3 wikipediaColor(int escapeVelocity) {
+    float index = float(escapeVelocity) / 50.0;
+    float modIndex = mod(index, 1.0);
+    return interpolateWikipediaPalette(index);
 }
 
 // Retrieve an orbit point from the texture.
@@ -349,6 +378,7 @@ int getEscapeVelocityPerturb(vec2 delta0) {
 #define ELECTRIC_PALETTE_ID 0
 #define RAINBOW_PALETTE_ID 1
 #define ZEBRA_PALETTE_ID 2
+#define WIKIPEDIA_PALETTE_ID 3
 
 vec3 renderOne(vec2 sampleCoord, vec2 scaleFactor) {
     int escapeVelocity = 0;
@@ -362,12 +392,14 @@ vec3 renderOne(vec2 sampleCoord, vec2 scaleFactor) {
 
     if (escapeVelocity >= uMaxIter) {
         return BLACK;
+    } else if (uPaletteId == ELECTRIC_PALETTE_ID) {
+        return electricColor(escapeVelocity);
     } else if (uPaletteId == RAINBOW_PALETTE_ID) {
         return rainbowColor(escapeVelocity);
     } else if(uPaletteId == ZEBRA_PALETTE_ID) {
         return zebraColor(escapeVelocity);
     } else {
-        return electricColor(escapeVelocity);
+        return wikipediaColor(escapeVelocity);
     }
 }
 

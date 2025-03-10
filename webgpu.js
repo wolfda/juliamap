@@ -290,8 +290,24 @@ const ELECTRIC = array<vec3f, 2>(BLUE, WHITE);
 const RAINBOW = array<vec3f, 6>(YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED);
 const ZEBRA = array<vec3f, 2>(WHITE, BLACK);
 
+// Same color palette as used on the Wikipedia page: https://en.wikipedia.org/wiki/Mandelbrot_set
+const WIKI0 = vec3f(  0,   7, 100) / 255.0;
+const WIKI1 = vec3f( 32, 107, 203) / 255.0;
+const WIKI2 = vec3f(237, 255, 255) / 255.0;
+const WIKI3 = vec3f(255, 170,   0) / 255.0;
+const WIKI4 = vec3f(  0,   2,   0) / 255.0;
+const WIKIPEDIA = array<vec3f, 5>(WIKI0, WIKI1, WIKI2, WIKI3, WIKI4);
+
 fn interpolatePalette6Color(palette: array<vec3f, 6>, index: f32) -> vec3f {
     let len = 6.0;
+    let c0 = palette[u32(fmod(len * index - 1, len))];
+    let c1 = palette[u32(fmod(len * index, len))];
+    let t = fmod(len * index, 1);
+    return c0 + t * (c1 - c0);
+}
+
+fn interpolatePalette5Color(palette: array<vec3f, 5>, index: f32) -> vec3f {
+    let len = 5.0;
     let c0 = palette[u32(fmod(len * index - 1, len))];
     let c1 = palette[u32(fmod(len * index, len))];
     let t = fmod(len * index, 1);
@@ -326,6 +342,10 @@ fn electricColor(escapeVelocity: u32) -> vec3f {
 
 fn zebraColor(escapeVelocity: u32) -> vec3f {
     return getPalette2Color(ZEBRA, f32(escapeVelocity) / 5);
+}
+
+fn wikipediaColor(escapeVelocity: u32) -> vec3f {
+    return interpolatePalette5Color(WIKIPEDIA, f32(escapeVelocity) / 50);
 }
 
 fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
@@ -365,6 +385,7 @@ fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
 const ELECTRIC_PALETTE_ID = 0u;
 const RAINBOW_PALETTE_ID = 1u;
 const ZEBRA_PALETTE_ID = 2u;
+const WIKIPEDIA_PALETTE_ID = 3u;
 
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
@@ -381,14 +402,17 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
         return BLACK;
     }
     switch (u.paletteId) {
+        case ELECTRIC_PALETTE_ID: {
+            return electricColor(escapeVelocity);
+        }
         case RAINBOW_PALETTE_ID: {
             return rainbowColor(escapeVelocity);
         }
         case ZEBRA_PALETTE_ID: {
             return zebraColor(escapeVelocity);
         }
-        default: {
-            return electricColor(escapeVelocity); 
+        case WIKIPEDIA_PALETTE_ID, default: {
+            return wikipediaColor(escapeVelocity); 
         }
     }
 }

@@ -260,7 +260,7 @@ function getDefaultIter() {
  */
 function previewAndScheduleFinalRender() {
     const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
-    const palette = paletteOverride || Palette.ELECTRIC;
+    const palette = paletteOverride || Palette.WIKIPEDIA;
     const pixelDensity = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
     const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
     const restPixelDensity = isWebGpu ? 8 : 1;

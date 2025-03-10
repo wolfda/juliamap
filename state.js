@@ -12,6 +12,7 @@ export const Palette = {
     ELECTRIC: "electric",
     RAINBOW: "rainbow",
     ZEBRA: "zebra",
+    WIKIPEDIA: "wikipedia",
 };
 
 export function getPaletteId(palette) {
@@ -22,12 +23,12 @@ export function getPaletteId(palette) {
             return 1;
         case Palette.ZEBRA:
             return 2;
+        case Palette.WIKIPEDIA:
+            return 3;
         default:
-            return 0;
+            return 3;
     }
 }
-
-const MAX_WEBGL_ZOOM = 18;
 
 // Capabilities
 let webgpuAvailable;
