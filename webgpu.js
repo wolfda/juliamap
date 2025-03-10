@@ -1,6 +1,6 @@
 import { Orbit } from "./julia.js";
 import { getMapState } from "./map.js";
-import { canvas, ctx, Palette } from "./state.js";
+import { canvas, ctx, Palette, getPaletteId } from "./state.js";
 
 // Offscreen canvas + context
 let offscreenCanvas = null;
@@ -113,19 +113,6 @@ export async function initWebGPU() {
     } catch (error) {
         console.warn(error);
         return false;
-    }
-}
-
-function getPaletteId(palette) {
-    switch (palette) {
-        case Palette.ELECTRIC:
-            return 0;
-        case Palette.RAINBOW:
-            return 1;
-        case Palette.ZEBRA:
-            return 2;
-        default:
-            return 0;
     }
 }
 

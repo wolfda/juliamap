@@ -4,6 +4,7 @@ export const RenderingEngine = {
     WEBGPU: "webgpu",
     WEBGPU_DEEP: "webgpu-deep",
     WEBGL: "webgl",
+    WEBGL_DEEP: "webgl-deep",
     CPU: "cpu",
 };
 
@@ -12,6 +13,19 @@ export const Palette = {
     RAINBOW: "rainbow",
     ZEBRA: "zebra",
 };
+
+export function getPaletteId(palette) {
+    switch (palette) {
+        case Palette.ELECTRIC:
+            return 0;
+        case Palette.RAINBOW:
+            return 1;
+        case Palette.ZEBRA:
+            return 2;
+        default:
+            return 0;
+    }
+}
 
 const MAX_WEBGL_ZOOM = 18;
 
@@ -35,8 +49,8 @@ export function getDefaultRenderingEngine() {
     const zoom = getMapState().zoom;
     if (webgpuAvailable) {
         return zoom < 16 ? RenderingEngine.WEBGPU : RenderingEngine.WEBGPU_DEEP;
-    } else if (webglAvailable && zoom < MAX_WEBGL_ZOOM) {
-        return RenderingEngine.WEBGL;
+    } else if (webglAvailable) {
+        return zoom < 16 ? RenderingEngine.WEBGL : RenderingEngine.WEBGL_DEEP;
     } else {
         return RenderingEngine.CPU;
     }

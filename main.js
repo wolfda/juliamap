@@ -350,7 +350,11 @@ function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
             break;
 
         case RenderingEngine.WEBGL:
-            renderFractalWebGL(pixelDensity);
+            renderFractalWebGL(pixelDensity, false, maxIter, palette);
+            break;
+
+        case RenderingEngine.WEBGL_DEEP:
+            renderFractalWebGL(pixelDensity, true, maxIter, palette);
             break;
 
         case RenderingEngine.WEBGPU:
