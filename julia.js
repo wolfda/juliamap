@@ -10,7 +10,7 @@ export function getEscapeVelocity(x0, y0, maxIter) {
         x = xn;
         y = yn;
 
-        // If we escape radius > 2, break out
+        // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
         if (x * x + y * y > 4.0) {
             return i;
         }
@@ -76,7 +76,7 @@ export class Orbit {
         this.escapeVelocity = null;
         this.iters = null;
     }
-    
+
     /**
      * Compute the escape velocity for the current orbit.
      */
@@ -91,7 +91,7 @@ export class Orbit {
      */
     withJuliaSeries(width, height, maxIter) {
         const candidate = screenToComplex(this.sx, this.sy, width, height);
-        this.iters = getJuliaSeries(candidate.cx, candidate.cy, maxIter);    
+        this.iters = getJuliaSeries(candidate.cx, candidate.cy, maxIter);
         return this;
     }
 }

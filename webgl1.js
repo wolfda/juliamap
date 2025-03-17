@@ -344,7 +344,7 @@ int getEscapeVelocity(vec2 c) {
         // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complex_square(z) + c;
 
-        // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4), the point escapes.
+        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
         if (complex_square_mod(z) > 4.0) {
             return i;
         }

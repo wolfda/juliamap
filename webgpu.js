@@ -373,7 +373,7 @@ fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
         // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complexSquare(z) + c;
 
-        // If the magnitude of z exceeds 2.0 (i.e., |z|² > 4), the point escapes.
+        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
         if (complexSquareMod(z) > 4) {
             return i;
         }
