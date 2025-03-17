@@ -11,8 +11,9 @@
  * 5. Doing an initial, coarse (1/8 resolution) preview in WebGL, then refining via CPU.
  */
 
-import { initWebGL, renderFractalWebGL } from "./webgl.js";
-import { canvas, getDefaultRenderingEngine, Palette, RenderingEngine, hasWebgpu, hasWebgl } from "./state.js";
+import { initWebGL1, renderFractalWebGL1 } from "./webgl1.js";
+import { initWebGL2, renderFractalWebGL2 } from "./webgl2.js";
+import { canvas, getDefaultRenderingEngine, Palette, RenderingEngine, hasWebgpu, hasWebgl1, hasWebgl2 } from "./state.js";
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 import { screenToComplex } from "./map.js";
@@ -64,7 +65,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     attachEventListeners();
 
     hasWebgpu(await initWebGPU());
-    hasWebgl(await initWebGL());
+    hasWebgl1(initWebGL1());
+    hasWebgl2(initWebGL2());
 
     // Initial render: do a partial render, then schedule a final CPU pass
     previewAndScheduleFinalRender();
@@ -349,14 +351,22 @@ function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
             renderFractalCPU(pixelDensity);
             break;
 
-        case RenderingEngine.WEBGL:
-            renderFractalWebGL(pixelDensity, false, maxIter, palette);
+        case RenderingEngine.WEBGL1:
+            renderFractalWebGL1(pixelDensity, false, maxIter, palette);
             break;
 
-        case RenderingEngine.WEBGL_DEEP:
-            renderFractalWebGL(pixelDensity, true, maxIter, palette);
+        case RenderingEngine.WEBGL1_DEEP:
+            renderFractalWebGL1(pixelDensity, true, maxIter, palette);
             break;
 
+        case RenderingEngine.WEBGL2:
+            renderFractalWebGL2(pixelDensity, false, maxIter, palette);
+            break;
+
+        case RenderingEngine.WEBGL2_DEEP:
+            renderFractalWebGL2(pixelDensity, true, maxIter, palette);
+            break;
+    
         case RenderingEngine.WEBGPU:
             renderFractalWebGPU(pixelDensity, false, maxIter, palette);
             break;

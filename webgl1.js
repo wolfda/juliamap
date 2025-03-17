@@ -17,7 +17,7 @@ let uResolution, uCenterZoom;
 let uMaxIter, uSamples, uPaletteId, uUsePerturb;
 // Note: Orbit data is now passed via a texture, so we do not use a large uniform array.
 
-export function initWebGL() {
+export function initWebGL1() {
     const webGLCanvas = document.createElement("canvas");
     webGLCanvas.width = 256;
     webGLCanvas.height = 256;
@@ -103,7 +103,7 @@ export function initWebGL() {
  * Supports supersampling, color palettes, perturbation for deep zoom (via an orbit texture),
  * and dynamic max iterations.
  */
-export function renderFractalWebGL(pixelDensity = 1, deep = false, maxIter = 500, palette = Palette.ELECTRIC) {
+export function renderFractalWebGL1(pixelDensity = 1, deep = false, maxIter = 500, palette = Palette.ELECTRIC) {
     if (!gl) {
         console.log("Unsupported WebGL");
         return;

@@ -239,18 +239,12 @@ var<storage, read> referenceOrbit: array<vec2f, ${MAX_ITERATIONS}>;
 
 // Compute c² on a complex number.
 fn complexSquare(c: vec2f) -> vec2f {
-    return vec2f(
-        c.x * c.x - c.y * c.y,  // real part
-        2 * c.x * c.y           // imaginary part
-    );
+    return vec2f(c.x * c.x - c.y * c.y, 2 * c.x * c.y);
 }
 
 // Compute c₀ x c₁ for 2 complex numbers.
 fn complexMul(c0: vec2f, c1: vec2f) -> vec2f {
-    return vec2f(
-        c0.x * c1.x - c0.y * c1.y,  // real part
-        c0.x * c1.y + c0.y * c1.x   // imaginary part
-    );
+    return vec2f(c0.x * c1.x - c0.y * c1.y, c0.x * c1.y + c0.y * c1.x);
 }
 
 // Compute |c|², the square of the modulus of a complex number.
@@ -348,6 +342,31 @@ fn wikipediaColor(escapeVelocity: u32) -> vec3f {
     return interpolatePalette5Color(WIKIPEDIA, f32(escapeVelocity) / 50);
 }
 
+const ELECTRIC_PALETTE_ID = 0u;
+const RAINBOW_PALETTE_ID = 1u;
+const ZEBRA_PALETTE_ID = 2u;
+const WIKIPEDIA_PALETTE_ID = 3u;
+
+fn getColor(escapeVelocity: u32) -> vec3f {
+    if (escapeVelocity == u.maxIter) {
+        return BLACK;
+    }
+    switch (u.paletteId) {
+        case ELECTRIC_PALETTE_ID: {
+            return electricColor(escapeVelocity);
+        }
+        case RAINBOW_PALETTE_ID: {
+            return rainbowColor(escapeVelocity);
+        }
+        case ZEBRA_PALETTE_ID: {
+            return zebraColor(escapeVelocity);
+        }
+        case WIKIPEDIA_PALETTE_ID, default: {
+            return wikipediaColor(escapeVelocity); 
+        }
+    }
+}
+
 fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
     var z = vec2f(0);
     for (var i = 0u; i < maxIter; i += 1u) {
@@ -382,11 +401,6 @@ fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
 
 // --- Rendering functions
 
-const ELECTRIC_PALETTE_ID = 0u;
-const RAINBOW_PALETTE_ID = 1u;
-const ZEBRA_PALETTE_ID = 2u;
-const WIKIPEDIA_PALETTE_ID = 3u;
-
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
     var escapeVelocity = 0u;
@@ -398,23 +412,7 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
         escapeVelocity = getEscapeVelocityPerturb(delta0, maxIter);
     }
 
-    if (escapeVelocity == maxIter) {
-        return BLACK;
-    }
-    switch (u.paletteId) {
-        case ELECTRIC_PALETTE_ID: {
-            return electricColor(escapeVelocity);
-        }
-        case RAINBOW_PALETTE_ID: {
-            return rainbowColor(escapeVelocity);
-        }
-        case ZEBRA_PALETTE_ID: {
-            return zebraColor(escapeVelocity);
-        }
-        case WIKIPEDIA_PALETTE_ID, default: {
-            return wikipediaColor(escapeVelocity); 
-        }
-    }
+    return getColor(escapeVelocity);
 }
 
 fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3f {
