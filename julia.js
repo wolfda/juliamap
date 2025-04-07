@@ -3,15 +3,19 @@ import { screenToComplex } from "./map.js";
 export function getEscapeVelocity(cx, cy, maxIter) {
     let x = 0;
     let y = 0;
+    let x2 = 0;
+    let y2 = 0;
     for (let i = 0; i < maxIter; i++) {
-        // Xₙ₊₁ = Xₙ² + X₀
-        const xn = x * x - y * y + cx;
+        // z = z² + c, where z² is computed using complex multiplication.
+        const xn = x2 - y2 + cx;
         const yn = 2.0 * x * y + cy;
         x = xn;
         y = yn;
+        x2 = x * x;
+        y2 = y * y;
 
         // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
-        if (x * x + y * y > 4.0) {
+        if (x2 + y2 > 4.0) {
             return i;
         }
     }
@@ -19,6 +23,7 @@ export function getEscapeVelocity(cx, cy, maxIter) {
     return maxIter;
 }
 
+// TODO: pass cx, cy in BigInt
 export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
     const precisionBits = BigInt(10 + 2 * Math.ceil(zoomLevel));
     const precisionBitsMinusOne = precisionBits - BigInt(1);
@@ -26,7 +31,6 @@ export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
     const big_four = BigInt(4) << precisionBits;
 
     // Convert initial coordinates to fixed precision BigInt
-    // TODO: check for overflow.
     const big_cx = BigInt(Math.floor(cx * Number(big_one)));
     const big_cy = BigInt(Math.floor(cy * Number(big_one)));
 
@@ -36,10 +40,10 @@ export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
     let zy2 = BigInt(0);
     for (let i = 0; i < maxIter; i++) {
         // Compute z = z² + c, where z² is computed using complex multiplication.
-        const newZx = zx2 - zy2 + big_cx;
-        const newZy = ((zx * zy) >> precisionBitsMinusOne) + big_cy;
-        zx = newZx;
-        zy = newZy;
+        const zxn = zx2 - zy2 + big_cx;
+        const zyn = ((zx * zy) >> precisionBitsMinusOne) + big_cy;
+        zx = zxn;
+        zy = zyn;
         zx2 = (zx * zx) >> precisionBits;
         zy2 = (zy * zy) >> precisionBits;
 
