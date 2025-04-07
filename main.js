@@ -348,7 +348,7 @@ function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
 
     switch (renderingEngine) {
         case RenderingEngine.CPU:
-            renderFractalCPU(pixelDensity);
+            renderFractalCPU(pixelDensity, maxIter, palette);
             break;
 
         case RenderingEngine.WEBGL1:

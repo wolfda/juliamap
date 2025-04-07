@@ -1,5 +1,5 @@
 import { getMapState } from "./map.js";
-import { canvas, ctx } from "./state.js";
+import { canvas, ctx, getPaletteId, Palette } from "./state.js";
 
 // Workers so we can terminate if user starts a new move
 let currentWorkers = [];
@@ -18,7 +18,7 @@ function getConcurrency() {
     return navigator.hardwareConcurrency || 4;
 }
 
-export function renderFractalCPU(pixelDensity = 1) {
+export function renderFractalCPU(pixelDensity = 1, maxIter = 500, palette = Palette.ELECTRIC) {
     terminateWorkers(); // Just to be safe, kill old workers
 
     const scale = Math.min(pixelDensity, 1);
@@ -61,6 +61,8 @@ export function renderFractalCPU(pixelDensity = 1) {
             zoom: mapState.zoom,
             startY,
             endY,
+            maxIter,
+            paletteId: getPaletteId(palette),
         };
 
         const worker = new Worker("cpu-worker.js", { type: "module" });
