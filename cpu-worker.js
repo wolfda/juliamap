@@ -1,4 +1,5 @@
 import { getEscapeVelocity } from "./julia.js"
+import { Complex } from "./complex.js";
 
 onmessage = function (e) {
   const {
@@ -27,7 +28,7 @@ onmessage = function (e) {
       const x0 = centerX + (px - width / 2) * scaleFactor;
       const y0 = centerY - (py - height / 2) * scaleFactor;
 
-      let escapeVelocity = getEscapeVelocity(x0, y0, maxIter);
+      let escapeVelocity = getEscapeVelocity(new Complex(x0, y0), maxIter);
 
       // iteration count used => escapeVelocity + 1
       totalIterations += escapeVelocity + 1;

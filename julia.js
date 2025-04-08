@@ -1,23 +1,18 @@
 import { screenToComplex } from "./map.js";
+import { Complex } from "./complex.js";
 
-export function getEscapeVelocity(cx, cy, maxIter) {
-    let x = 0;
-    let y = 0;
-    let x2 = 0;
-    let y2 = 0;
+export function getEscapeVelocity(c, maxIter) {
+    let z = new Complex(0, 0);
+    let z2 = new Complex(0, 0);
     for (let i = 0; i < maxIter; i++) {
         // z = z² + c, where z² is computed using complex multiplication.
-        const xn = x2 - y2 + cx;
-        const yn = 2.0 * x * y + cy;
-        x = xn;
-        y = yn;
-        x2 = x * x;
-        y2 = y * y;
+        z.setAdd(z2, c);
 
         // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
-        if (x2 + y2 > 4.0) {
+        if (z.squareMod() > 4.0) {
             return i;
         }
+        z2.setSquare(z);
     }
 
     return maxIter;
@@ -119,7 +114,7 @@ export class Orbit {
      */
     withEscapeVelocity(width, height, maxIter) {
         const candidate = screenToComplex(this.sx, this.sy, width, height);
-        this.escapeVelocity = getEscapeVelocity(candidate.cx, candidate.cy, maxIter);
+        this.escapeVelocity = getEscapeVelocity(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }
 
