@@ -4,6 +4,25 @@ export class Complex {
         this.y = y;
     }
 
+    // z = a
+    set(a) {
+        this.x = a.x;
+        this.y = a.y;
+    }
+
+    // z = z + a
+    add(a) {
+        this.x += a.x;
+        this.y += a.y;
+    }
+
+    // z = |z|²
+    square() {
+        const x = this.x * this.x - this.y * this.y;
+        this.y = 2 * this.x * this.y;
+        this.x = x;
+    } 
+
     // z = a + b
     setAdd(a, b) {
         this.x = a.x + b.x;

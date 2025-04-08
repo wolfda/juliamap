@@ -51,24 +51,24 @@ export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
     return maxIter;
 }
 
+
 /**
  * Compute the series for the center up to maxIter.
- * We store each Xₙ in a Float32Array as (x, y).
+ * We store each Zₙ in a Float32Array as (x, y).
  */
-export function getJuliaSeries(x0, y0, count) {
-    let x = x0;
-    let y = y0;
-
+export function getJuliaSeries(c, count) {
     const points = new Float32Array(2 * count);
 
+    // z₁ = c
+    let z = new Complex(0, 0);
+    z.set(c);
     for (let i = 0; i < count; i++) {
-        points[2 * i] = x;
-        points[2 * i + 1] = y;
+        points[2 * i] = z.x;
+        points[2 * i + 1] = z.y;
 
-        const x2 = x * x - y * y + x0;
-        const y2 = 2.0 * x * y + y0;
-        x = x2;
-        y = y2;
+        // z = z² + c
+        z.square();
+        z.add(c);
     }
     return points;
 }
@@ -123,7 +123,7 @@ export class Orbit {
      */
     withJuliaSeries(width, height, maxIter) {
         const candidate = screenToComplex(this.sx, this.sy, width, height);
-        this.iters = getJuliaSeries(candidate.cx, candidate.cy, maxIter);
+        this.iters = getJuliaSeries(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }
 }
