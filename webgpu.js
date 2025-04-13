@@ -1,4 +1,4 @@
-import { Orbit } from "./julia.js";
+import { Orbit, FN_MANDELBROT, FN_JULIA, DEFAULT_FN } from "./julia.js";
 import { getMapState } from "./map.js";
 import { canvas, ctx, Palette, getPaletteId } from "./state.js";
 
@@ -79,7 +79,7 @@ export async function initWebGPU() {
         // Create a buffer for the uniform data.
         // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
         gpuUniformBuffer = gpuDevice.createBuffer({
-            size: 40,
+            size: 48,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
@@ -119,7 +119,7 @@ export async function initWebGPU() {
 /**
  * Render fractal with WebGPU into an offscreen canvas, then blit to the visible canvas.
  */
-export function renderFractalWebGPU(pixelDensity = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC) {
+export function renderFractalWebGPU(pixelDensity = 1, deep = false, maxIter = DEFAULT_MAX_ITERATIONS, palette = Palette.ELECTRIC, fn = DEFAULT_FN) {
     maxIter = Math.min(maxIter, MAX_ITERATIONS);
     if (!gpuDevice || !gpuPipeline || !offscreenGpuContext) {
         console.error("WebGPU context not initialized properly");
@@ -147,10 +147,20 @@ export function renderFractalWebGPU(pixelDensity = 1, deep = false, maxIter = DE
     // 3. Write fractal parameters to GPU
     // ------------------------------------
     const state = getMapState();
-    const orbit = deep ? Orbit.searchMaxEscapeVelocity(w, h, maxIter) : undefined;
+    let orbit = undefined;
+    if (deep) {
+        switch (fn.id) {
+            case FN_MANDELBROT:
+                orbit = Orbit.searchForMandelbrot(w, h, maxIter);
+                break;
+            case FN_JULIA:
+                orbit = Orbit.searchForJulia(w, h, maxIter, fn.param0);
+                break;
+        }
+    }
     const samples = Math.floor(Math.max(pixelDensity, 1));
 
-    const uniformArray = new ArrayBuffer(36);
+    const uniformArray = new ArrayBuffer(48);
     const dataView = new DataView(uniformArray);
     dataView.setUint32(0, deep ? 1 : 0, true);    // usePerturbation
     dataView.setFloat32(4, state.zoom, true);      // zoom
@@ -159,8 +169,11 @@ export function renderFractalWebGPU(pixelDensity = 1, deep = false, maxIter = DE
     dataView.setFloat32(16, w, true);              // resolution
     dataView.setFloat32(20, h, true);              // resolution
     dataView.setUint32(24, maxIter, true);         // maxIter
-    dataView.setUint32(28, samples, true)          // samples
-    dataView.setUint32(32, getPaletteId(palette), true) // paletteId
+    dataView.setUint32(28, samples, true);         // samples
+    dataView.setUint32(32, getPaletteId(palette), true); // paletteId
+    dataView.setUint32(36, fn.id, true);                 // functionId
+    dataView.setFloat32(40, fn.param0.x, true);          // param0
+    dataView.setFloat32(44, fn.param0.y, true);          // param0
 
     gpuDevice.queue.writeBuffer(gpuUniformBuffer, 0, uniformArray);
 
@@ -227,6 +240,8 @@ struct FractalUniforms {
     maxIter        : u32,
     samples        : u32,
     paletteId      : u32,
+    functionId     : u32,
+    param0         : vec2f,
 };
 
 @group(0) @binding(0)
@@ -367,7 +382,10 @@ fn getColor(escapeVelocity: u32) -> vec3f {
     }
 }
 
-fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
+const FN_MANDELBROT = 0u;
+const FN_JULIA = 1u;
+
+fn mandelbrot(c: vec2f, maxIter: u32) -> u32 {
     var z = vec2f(0);
     for (var i = 0u; i < maxIter; i += 1u) {
         // Compute z = z² + c, where z² is computed using complex multiplication.
@@ -381,18 +399,50 @@ fn getEscapeVelocity(c: vec2f, maxIter: u32) -> u32 {
     return maxIter;
 }
 
-fn getEscapeVelocityPerturb(delta0: vec2f, maxIter: u32) -> u32 {
+fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> u32 {
+    var z = z0;
+    for (var i = 0u; i < maxIter; i += 1u) {
+        // Compute z = z² + c, where z² is computed using complex multiplication.
+        z = complexSquare(z) + c;
+
+        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
+        if (complexSquareMod(z) > 4) {
+            return i;
+        }
+    }
+    return maxIter;
+}
+
+fn mandelbrotPerturb(dc: vec2f, maxIter: u32) -> u32 {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
     // iterating ∆ₙ = Yₙ - Xₙ.
-    var delta = delta0;
-    var Xn = referenceOrbit[0];
+    var dz = vec2f(0);
+    var z = referenceOrbit[0];
 
     for (var i = 0u; i < maxIter; i += 1u) {
-        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ + ∆₀
-        delta = complexMul(2 * Xn + delta, delta) + delta0;
-        Xn = referenceOrbit[i + 1];
+        // dz = (2 * z + dz) * dz + dc
+        dz = complexMul(2 * z + dz, dz) + dc;
+        z = referenceOrbit[i + 1];
 
-        if (complexSquareMod(Xn + delta) > 4) {
+        if (complexSquareMod(z + dz) > 4) {
+            return i;
+        }
+    }
+    return maxIter;
+}
+
+fn juliaPerturb(dz0: vec2f, maxIter: u32) -> u32 {
+    // We'll do a loop up to maxIter, reading the reference Xₙ and
+    // iterating ∆ₙ = Yₙ - Xₙ.
+    var dz = dz0;
+    var z = referenceOrbit[0];
+
+    for (var i = 0u; i < maxIter; i += 1u) {
+        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ
+        dz = complexMul(2 * z + dz, dz);
+        z = referenceOrbit[i + 1];
+
+        if (complexSquareMod(z + dz) > 4) {
             return i;
         }
     }
@@ -405,11 +455,25 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
     var escapeVelocity = 0u;
     if u.usePerturbation == 0 {
-        let c = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
-        escapeVelocity = getEscapeVelocity(c, maxIter);
+        let pos = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
+        switch (u.functionId) {
+            case FN_JULIA: {
+                escapeVelocity = julia(pos, u.param0, maxIter);
+            }
+            case FN_MANDELBROT, default: {
+                escapeVelocity = mandelbrot(pos, maxIter);
+            }
+        }
     } else {
-        let delta0 = (fragCoord - u.center) * scaleFactor;
-        escapeVelocity = getEscapeVelocityPerturb(delta0, maxIter);
+        let delta = (fragCoord - u.center) * scaleFactor;
+        switch (u.functionId) {
+            case FN_JULIA: {
+                escapeVelocity = juliaPerturb(delta, maxIter);
+            }
+            case FN_MANDELBROT, default: {
+                escapeVelocity = mandelbrotPerturb(delta, maxIter);
+            }
+        }
     }
 
     return getColor(escapeVelocity);

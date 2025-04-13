@@ -1,4 +1,4 @@
-import { getEscapeVelocity } from "./julia.js"
+import { julia, FN_JULIA, FN_MANDELBROT } from "./julia.js"
 import { Complex } from "./complex.js";
 
 onmessage = function (e) {
@@ -12,6 +12,8 @@ onmessage = function (e) {
     endY,
     paletteId,
     maxIter,
+    functionId,
+    param0,
   } = e.data;
 
   // We’ll track totalIterations to estimate FLOPS
@@ -28,7 +30,16 @@ onmessage = function (e) {
       const x0 = centerX + (px - width / 2) * scaleFactor;
       const y0 = centerY - (py - height / 2) * scaleFactor;
 
-      let escapeVelocity = getEscapeVelocity(new Complex(x0, y0), maxIter);
+      let escapeVelocity;
+      switch (functionId) {
+        case FN_JULIA:
+          escapeVelocity = julia(new Complex(x0, y0), param0, maxIter);
+          break;
+        case FN_MANDELBROT:
+        default:
+          escapeVelocity = julia(new Complex(0, 0), new Complex(x0, y0), maxIter);
+          break;
+      }
 
       // iteration count used => escapeVelocity + 1
       totalIterations += escapeVelocity + 1;

@@ -1,25 +1,57 @@
 import { screenToComplex } from "./map.js";
 import { Complex } from "./complex.js";
 
-export function getEscapeVelocity(c, maxIter) {
-    let z = new Complex(0, 0);
-    let z2 = new Complex(0, 0);
+export const FN_MANDELBROT = 0;
+export const FN_JULIA = 1;
+
+export class Fn {
+    constructor(id, param0) {
+        this.id = id
+        this.param0 = param0 || new Complex(0, 0);
+    }
+}
+
+export const DEFAULT_FN = new Fn(FN_MANDELBROT);
+
+export function julia(z0, c, maxIter) {
+    let z = new Complex(z0.x, z0.y);
     for (let i = 0; i < maxIter; i++) {
         // z = z² + c, where z² is computed using complex multiplication.
-        z.setAdd(z2, c);
+        z.square();
+        z.add(c);
 
         // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
         if (z.squareMod() > 4.0) {
             return i;
         }
-        z2.setSquare(z);
     }
 
     return maxIter;
 }
 
+
+/**
+ * Compute the series for the center up to maxIter.
+ * We store each Zₙ in a Float32Array as (x, y).
+ */
+export function juliaSeries(z0, c, count) {
+    const points = new Float32Array(2 * count);
+
+    let z = new Complex(z0.x, z0.y);
+    for (let i = 0; i < count; i++) {
+        points[2 * i] = z.x;
+        points[2 * i + 1] = z.y;
+
+        // z = z² + c
+        z.square();
+        z.add(c);
+    }
+    return points;
+}
+
+
 // TODO: pass cx, cy in BigInt
-export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
+export function juliaBigInt(cx, cy, maxIter, zoomLevel) {
     const precisionBits = BigInt(10 + 2 * Math.ceil(zoomLevel));
     const precisionBitsMinusOne = precisionBits - BigInt(1);
     const big_one = BigInt(1) << precisionBits;
@@ -53,41 +85,35 @@ export function getEscapeVelocityBigInt(cx, cy, maxIter, zoomLevel) {
 
 
 /**
- * Compute the series for the center up to maxIter.
- * We store each Zₙ in a Float32Array as (x, y).
- */
-export function getJuliaSeries(c, count) {
-    const points = new Float32Array(2 * count);
-
-    // z₁ = c
-    let z = new Complex(0, 0);
-    z.set(c);
-    for (let i = 0; i < count; i++) {
-        points[2 * i] = z.x;
-        points[2 * i + 1] = z.y;
-
-        // z = z² + c
-        z.square();
-        z.add(c);
-    }
-    return points;
-}
-
-
-/**
  * An orbit is a reference point in the comlpex plan, with the precomputed Julia series.
  */
 export class Orbit {
+    static searchForMandelbrot(width, height, maxIter, maxSamples = 200) {
+        return Orbit.searchOrbit(width, height, maxIter, function (pos, maxIter) {
+            return julia(new Complex(0, 0), pos, maxIter);
+        }, function (pos, maxIter) {
+            return juliaSeries(new Complex(0, 0), pos, maxIter);
+        }, maxSamples)
+    }
+
+    static searchForJulia(width, height, maxIter, c, maxSamples = 200) {
+        return Orbit.searchOrbit(width, height, maxIter, function (pos, maxIter) {
+            return julia(pos, c, maxIter);
+        }, function (pos, maxIter) {
+            return juliaSeries(pos, c, maxIter);
+        }, maxSamples)
+    }
+
     /**
      * Search for the orbit with the heighest escape velocity in the current viewport.
      */
-    static searchMaxEscapeVelocity(width, height, maxIter, maxSamples = 200) {
+    static searchOrbit(width, height, maxIter, escapeFn, seriesFn, maxSamples = 200) {
         let bestOrbit = null;
 
         for (let s = 0; s < maxSamples; s++) {
             const sx = Math.random() * width;
             const sy = Math.random() * height;
-            const orbit = new Orbit(sx, sy).withEscapeVelocity(width, height, maxIter);
+            const orbit = new Orbit(sx, sy, escapeFn, seriesFn).withEscape(width, height, maxIter);
             if (bestOrbit === null || orbit.escapeVelocity > bestOrbit.escapeVelocity) {
                 bestOrbit = orbit;
             }
@@ -95,16 +121,18 @@ export class Orbit {
                 break;
             }
         }
-        return bestOrbit.withJuliaSeries(width, height, maxIter);
+        return bestOrbit.withSeries(width, height, maxIter);
     }
 
     /**
      * @param {number} sx screen x coordinate, in [0, width] 
      * @param {number} sy screen y coordinate, in [0, height]
      */
-    constructor(sx, sy) {
+    constructor(sx, sy, escapeFn, seriesFn) {
         this.sx = sx;
         this.sy = sy;
+        this.escapeFn = escapeFn;
+        this.seriesFn = seriesFn;
         this.escapeVelocity = null;
         this.iters = null;
     }
@@ -112,18 +140,18 @@ export class Orbit {
     /**
      * Compute the escape velocity for the current orbit.
      */
-    withEscapeVelocity(width, height, maxIter) {
+    withEscape(width, height, maxIter) {
         const candidate = screenToComplex(this.sx, this.sy, width, height);
-        this.escapeVelocity = getEscapeVelocity(new Complex(candidate.cx, candidate.cy), maxIter);
+        this.escapeVelocity = this.escapeFn(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }
 
     /**
      * Compute the Julia series for the current coordinate.
      */
-    withJuliaSeries(width, height, maxIter) {
+    withSeries(width, height, maxIter) {
         const candidate = screenToComplex(this.sx, this.sy, width, height);
-        this.iters = getJuliaSeries(new Complex(candidate.cx, candidate.cy), maxIter);
+        this.iters = this.seriesFn(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }
 }

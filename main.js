@@ -17,6 +17,8 @@ import { canvas, getDefaultRenderingEngine, Palette, RenderingEngine, hasWebgpu,
 import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
 import { renderFractalCPU, terminateWorkers } from "./cpu.js";
 import { screenToComplex } from "./map.js";
+import { FN_MANDELBROT, Fn, FN_JULIA } from "./julia.js";
+import { Complex } from "./complex.js";
 
 // --- New Imports from map.js (in your refactor) ---
 import {
@@ -267,12 +269,13 @@ function previewAndScheduleFinalRender() {
     const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
     const restPixelDensity = isWebGpu ? 8 : 1;
     const maxIter = maxIterationOverride || getDefaultIter();
-    renderFractal(renderingEngine, pixelDensity, maxIter, palette);
+    const fn = new Fn(FN_MANDELBROT);
+    renderFractal(renderingEngine, pixelDensity, maxIter, palette, fn);
 
     clearTimeout(renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, restPixelDensity, maxIter, palette);
+            renderFractal(renderingEngine, restPixelDensity, maxIter, palette, fn);
         }, 300);
     }
 }
@@ -342,13 +345,13 @@ function resizeCanvas() {
  * Main function to render the fractal (preview or final).
  * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
  */
-function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
+function renderFractal(renderingEngine, pixelDensity, maxIter, palette, fn) {
     terminateWorkers();
     updateRendingEngine(renderingEngine);
 
     switch (renderingEngine) {
         case RenderingEngine.CPU:
-            renderFractalCPU(pixelDensity, maxIter, palette);
+            renderFractalCPU(pixelDensity, maxIter, palette, fn);
             break;
 
         case RenderingEngine.WEBGL1:
@@ -366,13 +369,13 @@ function renderFractal(renderingEngine, pixelDensity, maxIter, palette) {
         case RenderingEngine.WEBGL2_DEEP:
             renderFractalWebGL2(pixelDensity, true, maxIter, palette);
             break;
-    
+
         case RenderingEngine.WEBGPU:
-            renderFractalWebGPU(pixelDensity, false, maxIter, palette);
+            renderFractalWebGPU(pixelDensity, false, maxIter, palette, fn);
             break;
 
         case RenderingEngine.WEBGPU_DEEP:
-            renderFractalWebGPU(pixelDensity, true, maxIter, palette);
+            renderFractalWebGPU(pixelDensity, true, maxIter, palette, fn);
             break;
     }
 }
