@@ -130,10 +130,10 @@ export function renderFractalWebGL1(pixelDensity = 1, deep = false, maxIter = 50
 
     if (deep) {
         // Compute reference orbit for perturbation.
-        // Orbit.searchMaxEscapeVelocity is assumed to return an object with:
+        // Orbit.searchForMandelbrot is assumed to return an object with:
         //   - sx, sy: the starting point for the orbit,
         //   - iters: a Float32Array of length 2*N containing N vec2 orbit points.
-        const orbit = Orbit.searchMaxEscapeVelocity(w, h, maxIter);
+        const orbit = Orbit.searchForMandelbrot(w, h, maxIter);
         // Use the orbit's starting point for the center.
         // Note: y-axis orientation is reversed for WebGL
         gl.uniform3f(uCenterZoom, orbit.sx, h - orbit.sy, state.zoom);
@@ -355,7 +355,7 @@ int getEscapeVelocity(vec2 c) {
 int getEscapeVelocityPerturb(vec2 delta0) {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
     // iterating ∆ₙ = Yₙ - Xₙ.
-    vec2 delta = delta0;
+    vec2 delta = vec2(0.0);
     vec2 Xn = getOrbitPoint(0);
 
     for (int i = 0; i < MAX_REF_ORBIT; i++) {
