@@ -11,14 +11,14 @@
  * 5. Doing an initial, coarse (1/8 resolution) preview in WebGL, then refining via CPU.
  */
 
-import { initWebGL1, renderFractalWebGL1 } from "./webgl1.js";
-import { initWebGL2, renderFractalWebGL2 } from "./webgl2.js";
-import { canvas, getDefaultRenderingEngine, Palette, RenderingEngine, hasWebgpu, hasWebgl1, hasWebgl2 } from "./state.js";
-import { initWebGPU, renderFractalWebGPU } from "./webgpu.js";
-import { renderFractalCPU, terminateWorkers } from "./cpu.js";
+import { canvas, ctx, Palette } from "./state.js";
 import { screenToComplex } from "./map.js";
-import { FN_MANDELBROT, Fn, FN_JULIA } from "./julia.js";
-import { Complex } from "./complex.js";
+import { FN_MANDELBROT, Fn } from "./julia.js";
+import { RenderOptions, getDefaultRenderingEngine, RenderingEngine } from "./renderers/renderer.js";
+import { Webgl1Renderer } from "./renderers/webgl1.js";
+import { Webgl2Renderer } from "./renderers/webgl2.js";
+import { WebgpuRenderer } from "./renderers/webgpu.js";
+import { CpuRenderer } from "./renderers/cpu.js";
 
 // --- New Imports from map.js (in your refactor) ---
 import {
@@ -38,6 +38,7 @@ const DEFAULT_CENTER = [-0.5, 0];
 let renderingEngineOverride = null;
 let paletteOverride = null;
 let maxIterationOverride = null;
+let deepOverride = null;
 
 // Keep track of pointer state during panning
 let isDragging = false;
@@ -54,6 +55,8 @@ let renderTimeoutId = null;
 // Debounce/timer for updating URL
 let updateURLTimeoutId = null;
 
+let renderer = undefined;
+
 // Device pixel ratio for crisp rendering on high-DPI
 const dpr = window.devicePixelRatio || 1;
 
@@ -62,25 +65,17 @@ const dpr = window.devicePixelRatio || 1;
  * init GPU or WebGL, and do an initial render.
  */
 window.addEventListener("DOMContentLoaded", async () => {
-    readStateFromURL();
+    await readStateFromURL();
     resizeCanvas();
     attachEventListeners();
 
-    hasWebgpu(await initWebGPU());
-    hasWebgl1(initWebGL1());
-    hasWebgl2(initWebGL2());
-
     // Initial render: do a partial render, then schedule a final CPU pass
     previewAndScheduleFinalRender();
-});
 
-/**
- * Listen for window resize, so we can adjust the canvas resolution
- * and re-render the fractal.
- */
-window.addEventListener("resize", () => {
-    resizeCanvas();
-    previewAndScheduleFinalRender();
+    window.addEventListener("resize", () => {
+        resizeCanvas();
+        previewAndScheduleFinalRender();
+    });
 });
 
 document.addEventListener("keydown", (e) => {
@@ -263,19 +258,21 @@ function getDefaultIter() {
  * Render a quick preview, then schedule a final CPU render.
  */
 function previewAndScheduleFinalRender() {
-    const renderingEngine = renderingEngineOverride || getDefaultRenderingEngine();
-    const palette = paletteOverride || Palette.WIKIPEDIA;
+    const renderingEngine = renderingEngineOverride ?? getDefaultRenderingEngine();
+    const palette = paletteOverride ?? Palette.WIKIPEDIA;
     const pixelDensity = renderingEngine == RenderingEngine.CPU ? 0.125 : 1;
-    const isWebGpu = [RenderingEngine.WEBGPU, RenderingEngine.WEBGPU_DEEP].includes(renderingEngine);
-    const restPixelDensity = isWebGpu ? 8 : 1;
+    const restPixelDensity = renderer.id() === RenderingEngine.WEBGPU ? 8 : 1;
     const maxIter = maxIterationOverride || getDefaultIter();
     const fn = new Fn(FN_MANDELBROT);
-    renderFractal(renderingEngine, pixelDensity, maxIter, palette, fn);
+    const mapState = getMapState();
+    const deep = deepOverride ?? mapState.zoom > 16;
+    renderer.render(new RenderOptions({ pixelDensity, deep, maxIter, palette, fn }))
+    updateRendingEngine(deep);
 
     clearTimeout(renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
         renderTimeoutId = setTimeout(() => {
-            renderFractal(renderingEngine, restPixelDensity, maxIter, palette, fn);
+            renderer.render(new RenderOptions({ pixelDensity: restPixelDensity, deep, maxIter, palette, fn }))
         }, 300);
     }
 }
@@ -304,7 +301,7 @@ function doUpdateURL() {
     params.set("y", state.y.toFixed(precision));
     params.set("z", zoom.toFixed(2));
     if (renderingEngineOverride) {
-        params.set("renderer", renderingEngineOverride);
+        params.set("renderer", renderingEngineOverride + (deepOverride ? ".deep" : ""));
     }
     if (maxIterationOverride !== null) {
         params.set("iter", maxIterationOverride);
@@ -320,15 +317,28 @@ function doUpdateURL() {
 /**
  * Read state from the URL (if present)
  */
-function readStateFromURL() {
+async function readStateFromURL() {
     const params = new URLSearchParams(window.location.search);
-    const x = params.has("x") ? parseFloat(params.get("x")) || DEFAULT_CENTER[0] : DEFAULT_CENTER[0];
-    const y = params.has("y") ? parseFloat(params.get("y")) || DEFAULT_CENTER[1] : DEFAULT_CENTER[1];
-    const zoom = params.has("z") ? parseFloat(params.get("z")) || 0 : 0;
+    const x = params.has("x") ? parseFloat(params.get("x")) ?? DEFAULT_CENTER[0] : DEFAULT_CENTER[0];
+    const y = params.has("y") ? parseFloat(params.get("y")) ?? DEFAULT_CENTER[1] : DEFAULT_CENTER[1];
+    const zoom = params.has("z") ? parseFloat(params.get("z")) ?? 0 : 0;
     renderingEngineOverride = params.get("renderer");
+    if (renderingEngineOverride) {
+        const split = renderingEngineOverride.split(".");
+        deepOverride = false;
+        if (split.length > 1) {
+            renderingEngineOverride = split[0];
+            deepOverride = split[1] === "deep";
+        }
+    }
     paletteOverride = params.get("palette");
     maxIterationOverride = params.has("iter") ? parseInt(params.get("iter")) || null : null;
+
     moveTo(x, y, zoom);
+    if (renderer) {
+        renderer.detach();
+    }
+    renderer = await newRenderer(canvas, ctx, renderingEngineOverride);
 }
 
 /**
@@ -339,45 +349,6 @@ function resizeCanvas() {
     canvas.height = window.innerHeight * dpr;
     canvas.style.width = window.innerWidth + "px";
     canvas.style.height = window.innerHeight + "px";
-}
-
-/**
- * Main function to render the fractal (preview or final).
- * If "cpu" is true, do CPU rendering; else do WebGL/WebGPU preview.
- */
-function renderFractal(renderingEngine, pixelDensity, maxIter, palette, fn) {
-    terminateWorkers();
-    updateRendingEngine(renderingEngine);
-
-    switch (renderingEngine) {
-        case RenderingEngine.CPU:
-            renderFractalCPU(pixelDensity, maxIter, palette, fn);
-            break;
-
-        case RenderingEngine.WEBGL1:
-            renderFractalWebGL1(pixelDensity, false, maxIter, palette);
-            break;
-
-        case RenderingEngine.WEBGL1_DEEP:
-            renderFractalWebGL1(pixelDensity, true, maxIter, palette);
-            break;
-
-        case RenderingEngine.WEBGL2:
-            renderFractalWebGL2(pixelDensity, false, maxIter, palette);
-            break;
-
-        case RenderingEngine.WEBGL2_DEEP:
-            renderFractalWebGL2(pixelDensity, true, maxIter, palette);
-            break;
-
-        case RenderingEngine.WEBGPU:
-            renderFractalWebGPU(pixelDensity, false, maxIter, palette, fn);
-            break;
-
-        case RenderingEngine.WEBGPU_DEEP:
-            renderFractalWebGPU(pixelDensity, true, maxIter, palette, fn);
-            break;
-    }
 }
 
 /**
@@ -467,6 +438,22 @@ export function debug(msg) {
 /**
  * Update the rendering engine overlay
  */
-function updateRendingEngine(renderingEngine) {
-    document.getElementById("flopStats").innerHTML = renderingEngine;
+function updateRendingEngine(deep) {
+    document.getElementById("flopStats").innerHTML = renderer.id() + (deep === true ? ".deep" : "");
+}
+
+async function newRenderer(canvas, ctx, renderingEngine) {
+    renderingEngine = renderingEngine ?? await getDefaultRenderingEngine();
+    switch (renderingEngine) {
+        case RenderingEngine.WEBGPU:
+            return await WebgpuRenderer.create(canvas, ctx);
+        case RenderingEngine.WEBGL2:
+            return Webgl2Renderer.create(canvas, ctx);
+        case RenderingEngine.WEBGL1:
+            return Webgl1Renderer.create(canvas, ctx);
+        case RenderingEngine.CPU:
+            return CpuRenderer.create(canvas, ctx);
+        default:
+            throw Error("Unknown renderer: " + renderingEngine);
+    }
 }
