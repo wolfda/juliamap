@@ -1,6 +1,16 @@
-import { julia, FN_JULIA, FN_MANDELBROT } from "../julia.js"
+import { julia, FN_JULIA, FN_MANDELBROT } from "../julia.js";
 import { Complex } from "../complex.js";
-import { BLACK, ELECTRIC_PALETTE_ID, electricColor, RAINBOW_PALETTE_ID, rainbowColor, WIKIPEDIA_PALETTE_ID, wikipediaColor, ZEBRA_PALETTE_ID, zebraColor } from "../palette.js";
+import {
+  BLACK,
+  ELECTRIC_PALETTE_ID,
+  electricColor,
+  RAINBOW_PALETTE_ID,
+  rainbowColor,
+  WIKIPEDIA_PALETTE_ID,
+  wikipediaColor,
+  ZEBRA_PALETTE_ID,
+  zebraColor,
+} from "../palette.js";
 
 onmessage = function (e) {
   try {
@@ -28,7 +38,7 @@ onmessage = function (e) {
     for (let py = startY; py < endY; py++) {
       for (let px = 0; px < width; px++) {
         // Map (px, py) -> complex plane
-        const scaleFactor = 4.0 / width * Math.pow(2, -zoom);
+        const scaleFactor = (4.0 / width) * Math.pow(2, -zoom);
         const x0 = centerX + (px - width / 2) * scaleFactor;
         const y0 = centerY - (py - height / 2) * scaleFactor;
 
@@ -39,7 +49,11 @@ onmessage = function (e) {
             break;
           case FN_MANDELBROT:
           default:
-            escapeVelocity = julia(new Complex(0, 0), new Complex(x0, y0), maxIter);
+            escapeVelocity = julia(
+              new Complex(0, 0),
+              new Complex(x0, y0),
+              maxIter
+            );
             break;
         }
 
@@ -63,7 +77,7 @@ onmessage = function (e) {
       startY,
       endY,
       imageDataArray,
-      totalIterations
+      totalIterations,
     });
   } catch (err) {
     console.error("Error", err);

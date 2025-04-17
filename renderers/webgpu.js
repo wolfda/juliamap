@@ -1,207 +1,217 @@
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../julia.js";
 import { getPaletteId } from "../palette.js";
 import { hasWebgpu } from "./capabilities.js";
-import { Renderer, RenderingEngine, RenderContext } from "./renderer.js"
-
+import { Renderer, RenderingEngine, RenderContext } from "./renderer.js";
 
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
 
 export class WebgpuRenderer extends Renderer {
-    static async create(canvas, ctx) {
-        const renderer = new WebgpuRenderer(canvas, ctx);
-        await renderer.init();
-        return renderer;
+  static async create(canvas, ctx) {
+    const renderer = new WebgpuRenderer(canvas, ctx);
+    await renderer.init();
+    return renderer;
+  }
+  constructor(canvas, ctx) {
+    super();
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.gpuDevice = undefined;
+    this.offscreenCanvas = undefined;
+    this.offscreenGpuContext = undefined;
+    this.gpuPipeline = undefined;
+    this.gpuUniformBuffer = undefined;
+    this.gpuReferenceOrbitBuffer = undefined;
+    this.gpuBindGroup = undefined;
+  }
+
+  id() {
+    return RenderingEngine.WEBGPU;
+  }
+
+  async init() {
+    if (!(await hasWebgpu())) {
+      throw new Error("Webgpu not supported");
     }
-    constructor(canvas, ctx) {
-        super();
-        this.canvas = canvas;
-        this.ctx = ctx;
-        this.gpuDevice = undefined;
-        this.offscreenCanvas = undefined;
-        this.offscreenGpuContext = undefined;
-        this.gpuPipeline = undefined;
-        this.gpuUniformBuffer = undefined;
-        this.gpuReferenceOrbitBuffer = undefined;
-        this.gpuBindGroup = undefined;
+    const adapter = await navigator.gpu.requestAdapter();
+    this.gpuDevice = await adapter.requestDevice();
+    // ----------------------------------------------
+    // 1. Create a hidden offscreen canvas + context
+    // ----------------------------------------------
+    this.offscreenCanvas = document.createElement("canvas");
+    this.offscreenCanvas.style.display = "none";
+    document.body.appendChild(this.offscreenCanvas);
+
+    this.offscreenGpuContext = this.offscreenCanvas.getContext("webgpu");
+
+    // Choose a preferred canvas format
+    const format = navigator.gpu.getPreferredCanvasFormat();
+
+    // Create our render pipeline
+    this.gpuPipeline = this.gpuDevice.createRenderPipeline({
+      layout: "auto",
+      vertex: {
+        module: this.gpuDevice.createShaderModule({
+          code: wgslVertexShader,
+        }),
+        entryPoint: "main",
+      },
+      fragment: {
+        module: this.gpuDevice.createShaderModule({
+          code: wgslFragmentShader,
+        }),
+        entryPoint: "main",
+        targets: [{ format }],
+      },
+      primitive: {
+        topology: "triangle-strip",
+        stripIndexFormat: undefined,
+      },
+    });
+
+    // Create a buffer for the uniform data.
+    // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
+    this.gpuUniformBuffer = this.gpuDevice.createBuffer({
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Create a buffer for the reference orbit data. We'll allocate enough for
+    // 2 floats * MAX_ITERATIONS = 2*4*MAX_ITERATIONS bytes.
+    const orbitBufferSize = 2 * 4 * MAX_ITERATIONS;
+    this.gpuReferenceOrbitBuffer = this.gpuDevice.createBuffer({
+      size: orbitBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    this.gpuBindGroup = this.gpuDevice.createBindGroup({
+      layout: this.gpuPipeline.getBindGroupLayout(0),
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: this.gpuUniformBuffer,
+          },
+        },
+        {
+          binding: 1,
+          resource: {
+            buffer: this.gpuReferenceOrbitBuffer,
+          },
+        },
+      ],
+    });
+  }
+
+  detach() {
+    document.removeChild(this.offscreenCanvas);
+  }
+
+  render(map, options) {
+    const maxIter = Math.min(options.maxIter, MAX_ITERATIONS);
+
+    // ------------------------------------
+    // 2. Configure our offscreen canvas
+    // ------------------------------------
+    const scale = Math.min(options.pixelDensity, 1);
+    const w = Math.floor(this.canvas.width * scale);
+    const h = Math.floor(this.canvas.height * scale);
+
+    this.offscreenCanvas.width = w;
+    this.offscreenCanvas.height = h;
+
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    this.offscreenGpuContext.configure({
+      device: this.gpuDevice,
+      format: format,
+      alphaMode: "premultiplied",
+    });
+
+    // ------------------------------------
+    // 3. Write fractal parameters to GPU
+    // ------------------------------------
+    let orbit = undefined;
+    if (options.deep) {
+      switch (options.fn.id) {
+        case FN_MANDELBROT:
+          orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+          break;
+        case FN_JULIA:
+          orbit = Orbit.searchForJulia(
+            map,
+            w,
+            h,
+            options.maxIter,
+            options.fn.param0
+          );
+          break;
+      }
+    }
+    const samples = Math.floor(Math.max(options.pixelDensity, 1));
+
+    const uniformArray = new ArrayBuffer(48);
+    const dataView = new DataView(uniformArray);
+    dataView.setUint32(0, options.deep ? 1 : 0, true); // usePerturbation
+    dataView.setFloat32(4, map.zoom, true); // zoom
+    dataView.setFloat32(8, orbit ? orbit.sx : map.x, true); // center
+    dataView.setFloat32(12, orbit ? orbit.sy : map.y, true); // center
+    dataView.setFloat32(16, w, true); // resolution
+    dataView.setFloat32(20, h, true); // resolution
+    dataView.setUint32(24, options.maxIter, true); // maxIter
+    dataView.setUint32(28, samples, true); // samples
+    dataView.setUint32(32, getPaletteId(options.palette), true); // paletteId
+    dataView.setUint32(36, options.fn.id, true); // functionId
+    dataView.setFloat32(40, options.fn.param0.x, true); // param0
+    dataView.setFloat32(44, options.fn.param0.y, true); // param0
+
+    this.gpuDevice.queue.writeBuffer(this.gpuUniformBuffer, 0, uniformArray);
+
+    if (orbit) {
+      this.gpuDevice.queue.writeBuffer(
+        this.gpuReferenceOrbitBuffer,
+        0,
+        orbit.iters
+      );
     }
 
-    id() {
-        return RenderingEngine.WEBGPU;
-    }
+    // Acquire a texture to render into (offscreen)
+    const renderView = this.offscreenGpuContext
+      .getCurrentTexture()
+      .createView();
 
-    async init() {
-        if (!await hasWebgpu()) {
-            throw new Error("Webgpu not supported");
-        }
-        const adapter = await navigator.gpu.requestAdapter();
-        this.gpuDevice = await adapter.requestDevice();
-        // ----------------------------------------------
-        // 1. Create a hidden offscreen canvas + context
-        // ----------------------------------------------
-        this.offscreenCanvas = document.createElement("canvas");
-        this.offscreenCanvas.style.display = "none";
-        document.body.appendChild(this.offscreenCanvas);
+    // Build the command pass
+    const commandEncoder = this.gpuDevice.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: renderView,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
 
-        this.offscreenGpuContext = this.offscreenCanvas.getContext("webgpu");
+    passEncoder.setPipeline(this.gpuPipeline);
+    passEncoder.setBindGroup(0, this.gpuBindGroup);
+    passEncoder.draw(4, 1, 0, 0); // 4 verts => full-screen quad
+    passEncoder.end();
 
-        // Choose a preferred canvas format
-        const format = navigator.gpu.getPreferredCanvasFormat();
+    const gpuCommands = commandEncoder.finish();
+    this.gpuDevice.queue.submit([gpuCommands]);
 
-        // Create our render pipeline
-        this.gpuPipeline = this.gpuDevice.createRenderPipeline({
-            layout: "auto",
-            vertex: {
-                module: this.gpuDevice.createShaderModule({
-                    code: wgslVertexShader
-                }),
-                entryPoint: "main"
-            },
-            fragment: {
-                module: this.gpuDevice.createShaderModule({
-                    code: wgslFragmentShader
-                }),
-                entryPoint: "main",
-                targets: [{ format }]
-            },
-            primitive: {
-                topology: "triangle-strip",
-                stripIndexFormat: undefined
-            }
-        });
+    // ------------------------------------
+    // 4. Blit from offscreen -> main canvas
+    // ------------------------------------
+    // Use the main canvas's 2D context to draw the offscreen image:
+    // If you want a simple "centered" or "fit" approach, you can do:
+    this.ctx.save();
+    this.ctx.scale(1 / scale, 1 / scale);
+    this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+    this.ctx.restore();
 
-        // Create a buffer for the uniform data.
-        // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
-        this.gpuUniformBuffer = this.gpuDevice.createBuffer({
-            size: 48,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
-
-        // Create a buffer for the reference orbit data. We'll allocate enough for
-        // 2 floats * MAX_ITERATIONS = 2*4*MAX_ITERATIONS bytes.
-        const orbitBufferSize = 2 * 4 * MAX_ITERATIONS;
-        this.gpuReferenceOrbitBuffer = this.gpuDevice.createBuffer({
-            size: orbitBufferSize,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-
-        this.gpuBindGroup = this.gpuDevice.createBindGroup({
-            layout: this.gpuPipeline.getBindGroupLayout(0),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: this.gpuUniformBuffer
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: this.gpuReferenceOrbitBuffer
-                    }
-                }
-            ]
-        });
-    }
-
-    detach() {
-        document.removeChild(this.offscreenCanvas);
-    }
-
-    render(map, options) {
-        const maxIter = Math.min(options.maxIter, MAX_ITERATIONS);
-
-        // ------------------------------------
-        // 2. Configure our offscreen canvas
-        // ------------------------------------
-        const scale = Math.min(options.pixelDensity, 1);
-        const w = Math.floor(this.canvas.width * scale);
-        const h = Math.floor(this.canvas.height * scale);
-
-        this.offscreenCanvas.width = w;
-        this.offscreenCanvas.height = h;
-
-        const format = navigator.gpu.getPreferredCanvasFormat();
-        this.offscreenGpuContext.configure({
-            device: this.gpuDevice,
-            format: format,
-            alphaMode: "premultiplied"
-        });
-
-        // ------------------------------------
-        // 3. Write fractal parameters to GPU
-        // ------------------------------------
-        let orbit = undefined;
-        if (options.deep) {
-            switch (options.fn.id) {
-                case FN_MANDELBROT:
-                    orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
-                    break;
-                case FN_JULIA:
-                    orbit = Orbit.searchForJulia(map, w, h, options.maxIter, options.fn.param0);
-                    break;
-            }
-        }
-        const samples = Math.floor(Math.max(options.pixelDensity, 1));
-
-        const uniformArray = new ArrayBuffer(48);
-        const dataView = new DataView(uniformArray);
-        dataView.setUint32(0, options.deep ? 1 : 0, true);    // usePerturbation
-        dataView.setFloat32(4, map.zoom, true);      // zoom
-        dataView.setFloat32(8, orbit ? orbit.sx : map.x, true);  // center
-        dataView.setFloat32(12, orbit ? orbit.sy : map.y, true); // center
-        dataView.setFloat32(16, w, true);              // resolution
-        dataView.setFloat32(20, h, true);              // resolution
-        dataView.setUint32(24, options.maxIter, true);         // maxIter
-        dataView.setUint32(28, samples, true);         // samples
-        dataView.setUint32(32, getPaletteId(options.palette), true); // paletteId
-        dataView.setUint32(36, options.fn.id, true);                 // functionId
-        dataView.setFloat32(40, options.fn.param0.x, true);          // param0
-        dataView.setFloat32(44, options.fn.param0.y, true);          // param0
-
-        this.gpuDevice.queue.writeBuffer(this.gpuUniformBuffer, 0, uniformArray);
-
-        if (orbit) {
-            this.gpuDevice.queue.writeBuffer(this.gpuReferenceOrbitBuffer, 0, orbit.iters);
-        }
-
-        // Acquire a texture to render into (offscreen)
-        const renderView = this.offscreenGpuContext.getCurrentTexture().createView();
-
-        // Build the command pass
-        const commandEncoder = this.gpuDevice.createCommandEncoder();
-        const passEncoder = commandEncoder.beginRenderPass({
-            colorAttachments: [
-                {
-                    view: renderView,
-                    clearValue: { r: 0, g: 0, b: 0, a: 1 },
-                    loadOp: "clear",
-                    storeOp: "store",
-                },
-            ],
-        });
-
-        passEncoder.setPipeline(this.gpuPipeline);
-        passEncoder.setBindGroup(0, this.gpuBindGroup);
-        passEncoder.draw(4, 1, 0, 0); // 4 verts => full-screen quad
-        passEncoder.end();
-
-        const gpuCommands = commandEncoder.finish();
-        this.gpuDevice.queue.submit([gpuCommands]);
-
-        // ------------------------------------
-        // 4. Blit from offscreen -> main canvas
-        // ------------------------------------
-        // Use the main canvas's 2D context to draw the offscreen image:
-        // If you want a simple "centered" or "fit" approach, you can do:
-        this.ctx.save();
-        this.ctx.scale(1 / scale, 1 / scale);
-        this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-        this.ctx.restore();
-
-        return new RenderContext(this.id(), options);
-    }
+    return new RenderContext(this.id(), options);
+  }
 }
-
 
 /* ---------------------------------------------------------
  * WGSL Shaders (updated to model complex numbers as vec2f)

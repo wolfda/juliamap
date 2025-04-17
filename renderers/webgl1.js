@@ -3,192 +3,207 @@ import { getPaletteId } from "../palette.js";
 import { hasWebgl1 } from "./capabilities.js";
 import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
 
-
 export class Webgl1Renderer extends Renderer {
-    static create(canvas, ctx) {
-        return new Webgl1Renderer(canvas, ctx);
+  static create(canvas, ctx) {
+    return new Webgl1Renderer(canvas, ctx);
+  }
+
+  constructor(canvas, ctx) {
+    super();
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.gl = undefined;
+    this.webGLProgram = undefined;
+    this.uResolution = undefined;
+    this.uCenterZoom = undefined;
+    this.uMaxIter = undefined;
+    this.uSamples = undefined;
+    this.uPaletteId = undefined;
+    this.uUsePerturb = undefined;
+
+    this.init();
+  }
+
+  id() {
+    return RenderingEngine.WEBGL1;
+  }
+
+  init() {
+    if (!hasWebgl1) {
+      throw new Error("Webgl1 not supported");
     }
 
-    constructor(canvas, ctx) {
-        super();
-        this.canvas = canvas;
-        this.ctx = ctx;
-        this.gl = undefined;
-        this.webGLProgram = undefined;
-        this.uResolution = undefined;
-        this.uCenterZoom = undefined;
-        this.uMaxIter = undefined;
-        this.uSamples = undefined;
-        this.uPaletteId = undefined;
-        this.uUsePerturb = undefined;
+    const webGLCanvas = document.createElement("canvas");
+    webGLCanvas.width = 256;
+    webGLCanvas.height = 256;
+    webGLCanvas.style.display = "none";
+    document.body.appendChild(webGLCanvas);
 
-        this.init();
+    this.gl = webGLCanvas.getContext("webgl");
+    const gl = this.gl;
+
+    // For floating-point textures we need the OES_texture_float extension.
+    if (!gl.getExtension("OES_texture_float")) {
+      throw new Error("OES_texture_float extension not supported.");
     }
 
-    id() {
-        return RenderingEngine.WEBGL1;
-    }
-
-    init() {
-        if (!hasWebgl1) {
-            throw new Error("Webgl1 not supported");
-        }
-
-        const webGLCanvas = document.createElement("canvas");
-        webGLCanvas.width = 256;
-        webGLCanvas.height = 256;
-        webGLCanvas.style.display = "none";
-        document.body.appendChild(webGLCanvas);
-
-        this.gl = webGLCanvas.getContext("webgl");
-        const gl = this.gl;
-
-        // For floating-point textures we need the OES_texture_float extension.
-        if (!gl.getExtension("OES_texture_float")) {
-            throw new Error("OES_texture_float extension not supported.");
-        }
-
-        // Vertex shader (full-screen quad)
-        const vsSource = `
+    // Vertex shader (full-screen quad)
+    const vsSource = `
         attribute vec2 aPosition;
         void main() {
             gl_Position = vec4(aPosition, 0.0, 1.0);
         }
         `;
 
-        // Compile and link shaders
-        function compileShader(source, type) {
-            const s = gl.createShader(type);
-            gl.shaderSource(s, source);
-            gl.compileShader(s);
-            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(s));
-                gl.deleteShader(s);
-                return null;
-            }
-            return s;
-        }
-
-        const vs = compileShader(vsSource, gl.VERTEX_SHADER);
-        const fs = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
-        this.webGLProgram = gl.createProgram();
-        gl.attachShader(this.webGLProgram, vs);
-        gl.attachShader(this.webGLProgram, fs);
-        gl.linkProgram(this.webGLProgram);
-
-        if (!gl.getProgramParameter(this.webGLProgram, gl.LINK_STATUS)) {
-            console.error("Could not link WebGL program:", gl.getProgramInfoLog(this.webGLProgram));
-            return false;
-        }
-
-        gl.useProgram(this.webGLProgram);
-
-        // Look up uniform locations.
-        this.uResolution = gl.getUniformLocation(this.webGLProgram, "uResolution");
-        this.uCenterZoom = gl.getUniformLocation(this.webGLProgram, "uCenterZoom");
-        this.uMaxIter = gl.getUniformLocation(this.webGLProgram, "uMaxIter");
-        this.uSamples = gl.getUniformLocation(this.webGLProgram, "uSamples");
-        this.uPaletteId = gl.getUniformLocation(this.webGLProgram, "uPaletteId");
-        this.uUsePerturb = gl.getUniformLocation(this.webGLProgram, "uUsePerturb");
-        // The orbit texture uniforms (uOrbitTex, uOrbitTexSize, uOrbitCount) will be set when needed.
-
-        // Setup a full-viewport quad.
-        const aPosition = gl.getAttribLocation(this.webGLProgram, "aPosition");
-        const vertexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-
-        const vertices = new Float32Array([
-            -1, -1,
-            1, -1,
-            -1, 1,
-            1, 1
-        ]);
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(aPosition);
-        gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
-
-        return true;
+    // Compile and link shaders
+    function compileShader(source, type) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(s));
+        gl.deleteShader(s);
+        return null;
+      }
+      return s;
     }
 
-    detach() {
-        document.removeChild(this.webGLCanvas);
+    const vs = compileShader(vsSource, gl.VERTEX_SHADER);
+    const fs = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
+    this.webGLProgram = gl.createProgram();
+    gl.attachShader(this.webGLProgram, vs);
+    gl.attachShader(this.webGLProgram, fs);
+    gl.linkProgram(this.webGLProgram);
+
+    if (!gl.getProgramParameter(this.webGLProgram, gl.LINK_STATUS)) {
+      console.error(
+        "Could not link WebGL program:",
+        gl.getProgramInfoLog(this.webGLProgram)
+      );
+      return false;
     }
 
-    render(map, options) {
-        const gl = this.gl;
+    gl.useProgram(this.webGLProgram);
 
-        const scale = Math.min(options.pixelDensity, 1);
-        const offscreenCanvas = gl.canvas;
-        const w = Math.floor(this.canvas.width * scale);
-        const h = Math.floor(this.canvas.height * scale);
+    // Look up uniform locations.
+    this.uResolution = gl.getUniformLocation(this.webGLProgram, "uResolution");
+    this.uCenterZoom = gl.getUniformLocation(this.webGLProgram, "uCenterZoom");
+    this.uMaxIter = gl.getUniformLocation(this.webGLProgram, "uMaxIter");
+    this.uSamples = gl.getUniformLocation(this.webGLProgram, "uSamples");
+    this.uPaletteId = gl.getUniformLocation(this.webGLProgram, "uPaletteId");
+    this.uUsePerturb = gl.getUniformLocation(this.webGLProgram, "uUsePerturb");
+    // The orbit texture uniforms (uOrbitTex, uOrbitTexSize, uOrbitCount) will be set when needed.
 
-        offscreenCanvas.width = w;
-        offscreenCanvas.height = h;
-        gl.viewport(0, 0, w, h);
+    // Setup a full-viewport quad.
+    const aPosition = gl.getAttribLocation(this.webGLProgram, "aPosition");
+    const vertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 
-        // Set uniforms.
-        gl.useProgram(this.webGLProgram);
-        gl.uniform2f(this.uResolution, w, h);
-        gl.uniform1i(this.uMaxIter, options.maxIter);
-        const samples = Math.floor(Math.max(options.pixelDensity, 1));
-        gl.uniform1i(this.uSamples, samples);
-        gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
-        gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
+    const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
-        if (options.deep) {
-            // Compute reference orbit for perturbation.
-            // Orbit.searchMaxEscapeVelocity is assumed to return an object with:
-            //   - sx, sy: the starting point for the orbit,
-            //   - iters: a Float32Array of length 2*N containing N vec2 orbit points.
-            const orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
-            // Use the orbit's starting point for the center.
-            // Note: y-axis orientation is reversed for WebGL
-            gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
-            // Create a texture from orbit data.
-            const orbitCount = orbit.iters.length / 2;
-            const texWidth = 256;
-            const texHeight = Math.ceil(0.5 * orbitCount / texWidth);
-            // Prepare a padded array for a RGBA texture.
-            const paddedOrbit = new Float32Array(texWidth * texHeight * 4);
-            paddedOrbit.set(orbit.iters);
+    return true;
+  }
 
-            // Create and bind the orbit texture.
-            const orbitTexture = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, orbitTexture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texWidth, texHeight, 0, gl.RGBA, gl.FLOAT, paddedOrbit);
-            // Set uniform for the orbit texture sampler (texture unit 0).
-            const uOrbitTexLocation = gl.getUniformLocation(this.webGLProgram, "uOrbitTex");
-            gl.uniform1i(uOrbitTexLocation, 0);
-            // Set uniform for orbit texture size.
-            const uOrbitTexSizeLocation = gl.getUniformLocation(this.webGLProgram, "uOrbitTexSize");
-            gl.uniform2f(uOrbitTexSizeLocation, texWidth, texHeight);
-            // Set uniform for the orbit count.
-            const uOrbitCountLocation = gl.getUniformLocation(this.webGLProgram, "uOrbitCount");
-            gl.uniform1i(uOrbitCountLocation, orbitCount);
-        } else {
-            gl.uniform3f(this.uCenterZoom, map.x, map.y, map.zoom);
-        }
+  detach() {
+    document.removeChild(this.webGLCanvas);
+  }
 
-        // Clear and draw.
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  render(map, options) {
+    const gl = this.gl;
 
-        // Blit to main canvas.
-        this.ctx.save();
-        this.ctx.scale(1 / scale, 1 / scale);
-        this.ctx.drawImage(offscreenCanvas, 0, 0);
-        this.ctx.restore();
+    const scale = Math.min(options.pixelDensity, 1);
+    const offscreenCanvas = gl.canvas;
+    const w = Math.floor(this.canvas.width * scale);
+    const h = Math.floor(this.canvas.height * scale);
 
-        return new RenderContext(this.id(), options);
+    offscreenCanvas.width = w;
+    offscreenCanvas.height = h;
+    gl.viewport(0, 0, w, h);
+
+    // Set uniforms.
+    gl.useProgram(this.webGLProgram);
+    gl.uniform2f(this.uResolution, w, h);
+    gl.uniform1i(this.uMaxIter, options.maxIter);
+    const samples = Math.floor(Math.max(options.pixelDensity, 1));
+    gl.uniform1i(this.uSamples, samples);
+    gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
+    gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
+
+    if (options.deep) {
+      // Compute reference orbit for perturbation.
+      // Orbit.searchMaxEscapeVelocity is assumed to return an object with:
+      //   - sx, sy: the starting point for the orbit,
+      //   - iters: a Float32Array of length 2*N containing N vec2 orbit points.
+      const orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+      // Use the orbit's starting point for the center.
+      // Note: y-axis orientation is reversed for WebGL
+      gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
+      // Create a texture from orbit data.
+      const orbitCount = orbit.iters.length / 2;
+      const texWidth = 256;
+      const texHeight = Math.ceil((0.5 * orbitCount) / texWidth);
+      // Prepare a padded array for a RGBA texture.
+      const paddedOrbit = new Float32Array(texWidth * texHeight * 4);
+      paddedOrbit.set(orbit.iters);
+
+      // Create and bind the orbit texture.
+      const orbitTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, orbitTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        texWidth,
+        texHeight,
+        0,
+        gl.RGBA,
+        gl.FLOAT,
+        paddedOrbit
+      );
+      // Set uniform for the orbit texture sampler (texture unit 0).
+      const uOrbitTexLocation = gl.getUniformLocation(
+        this.webGLProgram,
+        "uOrbitTex"
+      );
+      gl.uniform1i(uOrbitTexLocation, 0);
+      // Set uniform for orbit texture size.
+      const uOrbitTexSizeLocation = gl.getUniformLocation(
+        this.webGLProgram,
+        "uOrbitTexSize"
+      );
+      gl.uniform2f(uOrbitTexSizeLocation, texWidth, texHeight);
+      // Set uniform for the orbit count.
+      const uOrbitCountLocation = gl.getUniformLocation(
+        this.webGLProgram,
+        "uOrbitCount"
+      );
+      gl.uniform1i(uOrbitCountLocation, orbitCount);
+    } else {
+      gl.uniform3f(this.uCenterZoom, map.x, map.y, map.zoom);
     }
+
+    // Clear and draw.
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // Blit to main canvas.
+    this.ctx.save();
+    this.ctx.scale(1 / scale, 1 / scale);
+    this.ctx.drawImage(offscreenCanvas, 0, 0);
+    this.ctx.restore();
+
+    return new RenderContext(this.id(), options);
+  }
 }
-
 
 const fragmentShaderSource = `
 precision highp float;
