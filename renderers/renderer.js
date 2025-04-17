@@ -43,14 +43,3 @@ export class RenderContext {
   }
 }
 
-export async function getDefaultRenderingEngine() {
-  if (await hasWebgpu()) {
-    return RenderingEngine.WEBGPU;
-  } else if (hasWebgl2()) {
-    return RenderingEngine.WEBGL2;
-  } else if (hasWebgl1()) {
-    return RenderingEngine.WEBGL1;
-  } else {
-    return RenderingEngine.CPU;
-  }
-}

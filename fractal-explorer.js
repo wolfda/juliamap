@@ -1,15 +1,8 @@
 import { DEFAULT_FN } from "./julia.js";
 import { MapControl } from "./map.js";
 import { Palette } from "./palette.js";
-import { CpuRenderer } from "./renderers/cpu.js";
-import {
-  getDefaultRenderingEngine,
-  RenderingEngine,
-  RenderOptions,
-} from "./renderers/renderer.js";
-import { Webgl1Renderer } from "./renderers/webgl1.js";
-import { Webgl2Renderer } from "./renderers/webgl2.js";
-import { WebgpuRenderer } from "./renderers/webgpu.js";
+import { RenderingEngine, RenderOptions } from "./renderers/renderer.js";
+import { createRenderer } from "./renderers/renderers.js";
 
 // Device pixel ratio for crisp rendering on high-DPI
 const DPR = window.devicePixelRatio ?? 1;
@@ -64,7 +57,7 @@ export class FractalExplorer {
   async #initRenderer() {
     this.canvas = document.createElement("canvas");
     this.ctx = this.canvas.getContext("2d");
-    this.renderer = await newRenderer(
+    this.renderer = await createRenderer(
       this.canvas,
       this.ctx,
       this.map,
@@ -330,20 +323,4 @@ function getMidpoint(t1, t2) {
     x: (t1.clientX + t2.clientX) / 2,
     y: (t1.clientY + t2.clientY) / 2,
   };
-}
-
-async function newRenderer(canvas, ctx, map, renderingEngine) {
-  renderingEngine = renderingEngine ?? (await getDefaultRenderingEngine());
-  switch (renderingEngine) {
-    case RenderingEngine.WEBGPU:
-      return await WebgpuRenderer.create(canvas, ctx, map);
-    case RenderingEngine.WEBGL2:
-      return Webgl2Renderer.create(canvas, ctx, map);
-    case RenderingEngine.WEBGL1:
-      return Webgl1Renderer.create(canvas, ctx, map);
-    case RenderingEngine.CPU:
-      return CpuRenderer.create(canvas, ctx, map);
-    default:
-      throw Error("Unknown renderer: " + renderingEngine);
-  }
 }

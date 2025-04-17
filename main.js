@@ -1,9 +1,7 @@
-import {
-  getDefaultRenderingEngine,
-  RenderOptions,
-} from "./renderers/renderer.js";
+import { RenderOptions } from "./renderers/renderer.js";
 import { FractalExplorer } from "./fractal-explorer.js";
 import { AppState } from "./state.js";
+import { getDefaultRenderingEngine } from "./renderers/renderers.js";
 
 let appState = null;
 let fractalExplorer = null;
