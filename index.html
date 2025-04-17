@@ -1,38 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-NFV1GN5KXN"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-NFV1GN5KXN");
+    </script>
 
-<head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NFV1GN5KXN"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    gtag('js', new Date());
+    <link
+      rel="icon"
+      type="image/png"
+      href="/fav/favicon-96x96.png"
+      sizes="96x96"
+    />
+    <link rel="icon" type="image/svg+xml" href="/fav/favicon.svg" />
+    <link rel="shortcut icon" href="/fav/favicon.ico" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/fav/apple-touch-icon.png"
+    />
+    <link rel="manifest" href="/fav/site.webmanifest" />
 
-    gtag('config', 'G-NFV1GN5KXN');
-  </script>
+    <meta charset="UTF-8" />
+    <title>JuliaMap</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
 
-  <link rel="icon" type="image/png" href="/fav/favicon-96x96.png" sizes="96x96" />
-  <link rel="icon" type="image/svg+xml" href="/fav/favicon.svg" />
-  <link rel="shortcut icon" href="/fav/favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/fav/apple-touch-icon.png" />
-  <link rel="manifest" href="/fav/site.webmanifest" />
+  <body>
+    <div id="mandelbrotDiv"></div>
 
-  <meta charset="UTF-8" />
-  <title>JuliaMap</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="style.css" />
-</head>
+    <div id="flopStats" class="overlay"></div>
 
-<body>
-  <div id="mandelbrotDiv"></div>
+    <a id="github" target="_blank" href="https://github.com/wolfda/juliamap"
+      >GitHub</a
+    >
 
-  <!-- Bottom-right gauge overlay -->
-  <div id="flopStats" class="overlay"></div>
-
-  <a id="github" target="_blank" href="https://github.com/wolfda/juliamap">GitHub</a>
-
-  <script type="module" src="main.js"></script>
-</body>
-
+    <script type="module" src="main.js"></script>
+  </body>
 </html>
