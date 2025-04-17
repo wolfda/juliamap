@@ -23,24 +23,24 @@ export class FractalExplorer {
     onMapChanged,
     onRendered,
   } = {}) {
-    const explorer = new FractalExplorer({
+    const explorer = new FractalExplorer(
       divContainer,
       renderingEngine,
       options,
       onMapChanged,
-      onRendered,
-    });
+      onRendered
+    );
     await explorer.#initRenderer();
     return explorer;
   }
 
-  constructor({
+  constructor(
     divContainer,
     renderingEngine,
     options,
     onMapChanged,
-    onRendered,
-  } = {}) {
+    onRendered
+  ) {
     this.divContainer = divContainer;
     this.renderingEngine = renderingEngine;
     this.options = options;

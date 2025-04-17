@@ -29,7 +29,7 @@ export class Webgl1Renderer extends Renderer {
   }
 
   init() {
-    if (!hasWebgl1) {
+    if (!hasWebgl1()) {
       throw new Error("Webgl1 not supported");
     }
 
