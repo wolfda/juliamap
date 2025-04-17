@@ -1,8 +1,7 @@
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../julia.js";
-import { getMapState } from "../map.js";
 import { getPaletteId } from "../state.js";
 import { hasWebgpu } from "./capabilities.js";
-import { Renderer, RenderingEngine } from "./renderer.js"
+import { Renderer, RenderingEngine, RenderContext } from "./renderer.js"
 
 
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
@@ -108,7 +107,7 @@ export class WebgpuRenderer extends Renderer {
         document.removeChild(this.offscreenCanvas);
     }
 
-    render(options) {
+    render(map, options) {
         const maxIter = Math.min(options.maxIter, MAX_ITERATIONS);
 
         // ------------------------------------
@@ -131,15 +130,14 @@ export class WebgpuRenderer extends Renderer {
         // ------------------------------------
         // 3. Write fractal parameters to GPU
         // ------------------------------------
-        const state = getMapState();
         let orbit = undefined;
         if (options.deep) {
             switch (options.fn.id) {
                 case FN_MANDELBROT:
-                    orbit = Orbit.searchForMandelbrot(w, h, options.maxIter);
+                    orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
                     break;
                 case FN_JULIA:
-                    orbit = Orbit.searchForJulia(w, h, options.maxIter, options.fn.param0);
+                    orbit = Orbit.searchForJulia(map, w, h, options.maxIter, options.fn.param0);
                     break;
             }
         }
@@ -148,9 +146,9 @@ export class WebgpuRenderer extends Renderer {
         const uniformArray = new ArrayBuffer(48);
         const dataView = new DataView(uniformArray);
         dataView.setUint32(0, options.deep ? 1 : 0, true);    // usePerturbation
-        dataView.setFloat32(4, state.zoom, true);      // zoom
-        dataView.setFloat32(8, orbit ? orbit.sx : state.x, true);  // center
-        dataView.setFloat32(12, orbit ? orbit.sy : state.y, true); // center
+        dataView.setFloat32(4, map.zoom, true);      // zoom
+        dataView.setFloat32(8, orbit ? orbit.sx : map.x, true);  // center
+        dataView.setFloat32(12, orbit ? orbit.sy : map.y, true); // center
         dataView.setFloat32(16, w, true);              // resolution
         dataView.setFloat32(20, h, true);              // resolution
         dataView.setUint32(24, options.maxIter, true);         // maxIter
@@ -199,6 +197,8 @@ export class WebgpuRenderer extends Renderer {
         this.ctx.scale(1 / scale, 1 / scale);
         this.ctx.drawImage(this.offscreenCanvas, 0, 0);
         this.ctx.restore();
+
+        return new RenderContext(this.id(), options);
     }
 }
 

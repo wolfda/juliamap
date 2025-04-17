@@ -1,4 +1,3 @@
-import { screenToComplex } from "./map.js";
 import { Complex } from "./complex.js";
 
 export const FN_MANDELBROT = 0;
@@ -88,16 +87,16 @@ export function juliaBigInt(cx, cy, maxIter, zoomLevel) {
  * An orbit is a reference point in the comlpex plan, with the precomputed Julia series.
  */
 export class Orbit {
-    static searchForMandelbrot(width, height, maxIter, maxSamples = 200) {
-        return Orbit.searchOrbit(width, height, maxIter, function (pos, maxIter) {
+    static searchForMandelbrot(map, width, height, maxIter, maxSamples = 200) {
+        return Orbit.searchOrbit(map, width, height, maxIter, function (pos, maxIter) {
             return julia(new Complex(0, 0), pos, maxIter);
         }, function (pos, maxIter) {
             return juliaSeries(new Complex(0, 0), pos, maxIter);
         }, maxSamples)
     }
 
-    static searchForJulia(width, height, maxIter, c, maxSamples = 200) {
-        return Orbit.searchOrbit(width, height, maxIter, function (pos, maxIter) {
+    static searchForJulia(map, width, height, maxIter, c, maxSamples = 200) {
+        return Orbit.searchOrbit(map, width, height, maxIter, function (pos, maxIter) {
             return julia(pos, c, maxIter);
         }, function (pos, maxIter) {
             return juliaSeries(pos, c, maxIter);
@@ -107,13 +106,13 @@ export class Orbit {
     /**
      * Search for the orbit with the heighest escape velocity in the current viewport.
      */
-    static searchOrbit(width, height, maxIter, escapeFn, seriesFn, maxSamples = 200) {
+    static searchOrbit(map, width, height, maxIter, escapeFn, seriesFn, maxSamples = 200) {
         let bestOrbit = null;
 
         for (let s = 0; s < maxSamples; s++) {
             const sx = Math.random() * width;
             const sy = Math.random() * height;
-            const orbit = new Orbit(sx, sy, escapeFn, seriesFn).withEscape(width, height, maxIter);
+            const orbit = new Orbit(map, sx, sy, escapeFn, seriesFn).withEscape(width, height, maxIter);
             if (bestOrbit === null || orbit.escapeVelocity > bestOrbit.escapeVelocity) {
                 bestOrbit = orbit;
             }
@@ -128,7 +127,8 @@ export class Orbit {
      * @param {number} sx screen x coordinate, in [0, width] 
      * @param {number} sy screen y coordinate, in [0, height]
      */
-    constructor(sx, sy, escapeFn, seriesFn) {
+    constructor(map, sx, sy, escapeFn, seriesFn) {
+        this.map = map;
         this.sx = sx;
         this.sy = sy;
         this.escapeFn = escapeFn;
@@ -141,7 +141,7 @@ export class Orbit {
      * Compute the escape velocity for the current orbit.
      */
     withEscape(width, height, maxIter) {
-        const candidate = screenToComplex(this.sx, this.sy, width, height);
+        const candidate = this.map.screenToComplex(this.sx, this.sy, width, height);
         this.escapeVelocity = this.escapeFn(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }
@@ -150,7 +150,7 @@ export class Orbit {
      * Compute the Julia series for the current coordinate.
      */
     withSeries(width, height, maxIter) {
-        const candidate = screenToComplex(this.sx, this.sy, width, height);
+        const candidate = this.map.screenToComplex(this.sx, this.sy, width, height);
         this.iters = this.seriesFn(new Complex(candidate.cx, candidate.cy), maxIter);
         return this;
     }

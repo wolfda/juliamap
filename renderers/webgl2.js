@@ -1,14 +1,7 @@
-// --------------------------------------
-// webgl2.js
-// A WebGL2 Mandelbrot renderer that uses a uniform buffer for orbit data
-// and arrays for color palettes & interpolation functions.
-// --------------------------------------
-
-import { getMapState } from "../map.js";
 import { getPaletteId } from "../state.js";
 import { Orbit } from "../julia.js"; // for deep zoom perturbation
 import { hasWebgl2 } from "./capabilities.js";
-import { Renderer, RenderingEngine } from "./renderer.js";
+import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
 
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
 
@@ -128,7 +121,7 @@ void main() {
         document.removeChild(this.webGLCanvas);
     }
 
-    render(options) {
+    render(map, options) {
         const gl = this.gl;
         const scale = Math.min(options.pixelDensity, 1);
         const offscreenCanvas = gl.canvas;
@@ -140,7 +133,6 @@ void main() {
         gl.viewport(0, 0, w, h);
 
         // Set uniforms.
-        const state = getMapState();
         gl.useProgram(this.webGLProgram);
         gl.uniform2f(this.uResolution, w, h);
         gl.uniform1i(this.uMaxIter, options.maxIter);
@@ -154,9 +146,9 @@ void main() {
             // Orbit.searchMaxEscapeVelocity is expected to return an object with:
             //   - sx, sy: starting point for the orbit,
             //   - iters: a Float32Array containing interleaved vec2 orbit points.
-            const orbit = Orbit.searchForMandelbrot(w, h, options.maxIter);
+            const orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
             // Use the orbit’s starting point (note: y-axis is flipped for display).
-            gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, state.zoom);
+            gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
             // Limit orbit count to the maximum our uniform block supports.
             const orbitCount = Math.min(orbit.iters.length / 2, MAX_ITERATIONS);
             gl.uniform1i(this.uOrbitCount, orbitCount);
@@ -173,7 +165,7 @@ void main() {
             gl.bufferData(gl.UNIFORM_BUFFER, paddedOrbit, gl.STATIC_DRAW);
             gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.orbitBuffer);
         } else {
-            gl.uniform3f(this.uCenterZoom, state.x, state.y, state.zoom);
+            gl.uniform3f(this.uCenterZoom, map.x, map.y, map.zoom);
         }
 
         // Clear and draw.
@@ -186,6 +178,8 @@ void main() {
         this.ctx.scale(1 / scale, 1 / scale);
         this.ctx.drawImage(offscreenCanvas, 0, 0);
         this.ctx.restore();
+
+        return new RenderContext(this.id(), options);
     }
 }
 

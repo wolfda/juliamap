@@ -1,5 +1,3 @@
-import { DEFAULT_FN } from "../julia.js";
-import { Palette } from "../state.js";
 import { hasWebgl1, hasWebgl2, hasWebgpu } from "./capabilities.js";
 
 export const RenderingEngine = {
@@ -10,7 +8,12 @@ export const RenderingEngine = {
 };
 
 export class Renderer {
-    render(options) {
+    /**
+     * @param {MapControl} map
+     * @param {RenderOptions} options
+     * @returns {RenderContext}
+     */
+    render(map, options) {
         throw new Error("Not implemented");
     }
 
@@ -26,10 +29,17 @@ export class Renderer {
 export class RenderOptions {
     constructor({ pixelDensity, deep, maxIter, palette, fn } = {}) {
         this.pixelDensity = pixelDensity ?? 1;
-        this.deep = deep ?? false;
-        this.maxIter = maxIter ?? 500;
-        this.palette = palette ?? Palette.ELECTRIC
-        this.fn = fn ?? DEFAULT_FN
+        this.deep = deep;
+        this.maxIter = maxIter;
+        this.palette = palette
+        this.fn = fn
+    }
+}
+
+export class RenderContext {
+    constructor(id, options) {
+        this.id = id;
+        this.options = options;
     }
 }
 

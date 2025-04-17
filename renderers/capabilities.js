@@ -47,7 +47,7 @@ function checkWebgl1() {
         return false;
     }
 
-    // This is required to store high precision orbits for WEBGL1_DEEP implementation
+    // This is required to store high precision orbits for the `deep` implementation.
     return glContext.getExtension("OES_texture_float") !== null;
 }
 

@@ -104,7 +104,7 @@ const WIKIPEDIA = [
   new Color(32, 107, 203),
   new Color(237, 255, 255),
   new Color(255, 170, 0),
-  new Color(0, 2, 0)
+  new Color(0, 2, 0),
 ];
 
 function fmod(a, b) {
