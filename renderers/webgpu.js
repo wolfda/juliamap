@@ -50,15 +50,11 @@ export class WebgpuRenderer extends Renderer {
     this.gpuPipeline = this.gpuDevice.createRenderPipeline({
       layout: "auto",
       vertex: {
-        module: this.gpuDevice.createShaderModule({
-          code: wgslVertexShader,
-        }),
+        module: await this.#createShaderModule(wgslVertexShader),
         entryPoint: "main",
       },
       fragment: {
-        module: this.gpuDevice.createShaderModule({
-          code: wgslFragmentShader,
-        }),
+        module: await this.#createShaderModule(wgslFragmentShader),
         entryPoint: "main",
         targets: [{ format }],
       },
@@ -100,6 +96,15 @@ export class WebgpuRenderer extends Renderer {
         },
       ],
     });
+  }
+
+  async #createShaderModule(code) {
+    const shaderModule = this.gpuDevice.createShaderModule({ code });
+    const compilationInfo = await shaderModule.getCompilationInfo();
+    if (compilationInfo.messages.some((msg) => msg.type === "error")) {
+      throw new Error("Shader compilation error");
+    }
+    return shaderModule;
   }
 
   detach() {
