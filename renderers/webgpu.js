@@ -1,5 +1,5 @@
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../julia.js";
-import { getPaletteId } from "../state.js";
+import { getPaletteId } from "../palette.js";
 import { hasWebgpu } from "./capabilities.js";
 import { Renderer, RenderingEngine, RenderContext } from "./renderer.js"
 

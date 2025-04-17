@@ -1,4 +1,4 @@
-import { getPaletteId } from "../state.js";
+import { getPaletteId } from "../palette.js";
 import { getCpuCount } from "./capabilities.js";
 import { RenderContext, Renderer, RenderingEngine } from "./renderer.js"
 

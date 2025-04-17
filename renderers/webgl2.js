@@ -1,5 +1,5 @@
-import { getPaletteId } from "../state.js";
 import { Orbit } from "../julia.js"; // for deep zoom perturbation
+import { getPaletteId } from "../palette.js";
 import { hasWebgl2 } from "./capabilities.js";
 import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
 

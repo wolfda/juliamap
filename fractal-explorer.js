@@ -1,12 +1,12 @@
 
 import { DEFAULT_FN } from "./julia.js";
 import { MapControl } from "./map.js";
+import { Palette } from "./palette.js";
 import { CpuRenderer } from "./renderers/cpu.js";
 import { getDefaultRenderingEngine, RenderingEngine, RenderOptions } from "./renderers/renderer.js";
 import { Webgl1Renderer } from "./renderers/webgl1.js";
 import { Webgl2Renderer } from "./renderers/webgl2.js";
 import { WebgpuRenderer } from "./renderers/webgpu.js";
-import { Palette } from "./state.js";
 
 
 // Device pixel ratio for crisp rendering on high-DPI

@@ -1,28 +1,6 @@
 const BITS_PER_DECIMAL = Math.log10(2);
 const DEFAULT_CENTER = [-0.5, 0];
 
-export const Palette = {
-    ELECTRIC: "electric",
-    RAINBOW: "rainbow",
-    ZEBRA: "zebra",
-    WIKIPEDIA: "wikipedia",
-};
-
-export function getPaletteId(palette) {
-    switch (palette) {
-        case Palette.ELECTRIC:
-            return 0;
-        case Palette.RAINBOW:
-            return 1;
-        case Palette.ZEBRA:
-            return 2;
-        case Palette.WIKIPEDIA:
-            return 3;
-        default:
-            return 3;
-    }
-}
-
 export class AppState {
     static parseFromAddressBar() {
         const params = new URLSearchParams(window.location.search);
