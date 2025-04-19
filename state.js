@@ -2,18 +2,14 @@ import { Complex } from "./complex.js";
 import { Layout } from "./julia-explorer.js";
 
 const BITS_PER_DECIMAL = Math.log10(2);
-const DEFAULT_CENTER = new Complex(-0.5, 0);
+const DEFAULT_CENTER = [-0.5, 0, 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
 
 export class AppState {
   static parseFromAddressBar() {
     const params = new URLSearchParams(window.location.search);
-    const x = float(params, "x", DEFAULT_CENTER.x);
-    const y = float(params, "y", DEFAULT_CENTER.y);
-    const zoom = float(params, "z", 0);
-    const jx = float(params, "jx", 0);
-    const jy = float(params, "jy", 0);
-    const jzoom = float(params, "jz", 0);
+    const [x, y, zoom] = parseXYZ(params.get("mpos"), DEFAULT_CENTER);
+    const [jx, jy, jzoom] = parseXYZ(params.get("jpos"), [0, 0, 0]);
     const layout = params.get("layout") ?? DEFAULT_LAYOUT;
     let renderingEngine = params.get("renderer");
     let deep = null;
@@ -80,14 +76,8 @@ export class AppState {
 
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
-    const precision = 3 + Math.ceil(this.zoom * BITS_PER_DECIMAL);
-    params.set("x", this.x.toFixed(precision));
-    params.set("y", this.y.toFixed(precision));
-    params.set("z", this.zoom.toFixed(2));
-    const jprecision = 3 + Math.ceil(this.jzoom * BITS_PER_DECIMAL);
-    params.set("jx", this.jx.toFixed(jprecision));
-    params.set("jy", this.jy.toFixed(jprecision));
-    params.set("jz", this.jzoom.toFixed(2));
+    params.set("mpos", renderXYZ(this.x, this.y, this.zoom));
+    params.set("jpos", renderXYZ(this.jx, this.jy, this.jzoom));
     if (this.layout !== null && this.layout != DEFAULT_LAYOUT) {
       params.set("layout", this.layout);
     } else {
@@ -106,6 +96,26 @@ export class AppState {
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", newUrl);
   }
+}
+
+function parseXYZ(xyz, def) {
+  if (!xyz) {
+    return def;
+  }
+  const components = xyz.split("_");
+  if (components.length != 3) {
+    return def;
+  }
+  return [
+    parseFloat(components[0]) ?? def[0],
+    parseFloat(components[1]) ?? def[1],
+    parseFloat(components[2]) ?? def[2],
+  ];
+}
+
+function renderXYZ(x, y, z) {
+  const precision = 3 + Math.ceil(z * BITS_PER_DECIMAL);
+  return [x.toFixed(precision), y.toFixed(precision), z.toFixed(2)].join("_");
 }
 
 function float(params, key, def) {
