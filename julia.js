@@ -2,6 +2,7 @@ import { Complex } from "./complex.js";
 
 export const FN_MANDELBROT = 0;
 export const FN_JULIA = 1;
+const BAILOUT = 128;
 
 export class Fn {
   constructor(id, param0) {
@@ -16,6 +17,10 @@ export class Fn {
 
 export const DEFAULT_FN = new Fn(FN_MANDELBROT);
 
+function smoothEscapeVelocity(iter, squareMod) {
+  return iter + 1 - Math.log(Math.log(squareMod)) / Math.log(2);
+}
+
 export function julia(z0, c, maxIter) {
   let z = new Complex(z0.x, z0.y);
   for (let i = 0; i < maxIter; i++) {
@@ -24,8 +29,9 @@ export function julia(z0, c, maxIter) {
     z.add(c);
 
     // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
-    if (z.squareMod() > 4.0) {
-      return i;
+    const squareMod = z.squareMod();
+    if (squareMod > BAILOUT * BAILOUT) {
+      return smoothEscapeVelocity(i, squareMod);
     }
   }
 

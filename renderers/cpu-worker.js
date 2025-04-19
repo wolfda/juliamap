@@ -91,17 +91,17 @@ function getColor(escapeVelocity, maxIter, paletteId) {
   }
   switch (paletteId) {
     case ELECTRIC_PALETTE_ID: {
-      return electricColor(escapeVelocity / 200);
+      return electricColor(escapeVelocity / 100);
     }
     case RAINBOW_PALETTE_ID: {
-      return rainbowColor(escapeVelocity / 200);
+      return rainbowColor(escapeVelocity / 150);
     }
     case ZEBRA_PALETTE_ID: {
       return zebraColor(escapeVelocity / 5);
     }
     case WIKIPEDIA_PALETTE_ID:
     default: {
-      return wikipediaColor(escapeVelocity / 50);
+      return wikipediaColor(escapeVelocity / 15 + 0.2);
     }
   }
 }

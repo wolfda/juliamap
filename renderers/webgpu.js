@@ -343,20 +343,20 @@ fn getPalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
 
 // --- Julia functions
 
-fn rainbowColor(escapeVelocity: u32) -> vec3f {
-    return interpolatePalette6Color(RAINBOW, f32(escapeVelocity) / 200);
+fn rainbowColor(escapeVelocity: f32) -> vec3f {
+    return interpolatePalette6Color(RAINBOW, escapeVelocity / 150);
 }
 
-fn electricColor(escapeVelocity: u32) -> vec3f {
-    return interpolatePalette2Color(ELECTRIC, f32(escapeVelocity) / 200);
+fn electricColor(escapeVelocity: f32) -> vec3f {
+    return interpolatePalette2Color(ELECTRIC, escapeVelocity / 100);
 }
 
-fn zebraColor(escapeVelocity: u32) -> vec3f {
-    return getPalette2Color(ZEBRA, f32(escapeVelocity) / 5);
+fn zebraColor(escapeVelocity: f32) -> vec3f {
+    return getPalette2Color(ZEBRA, escapeVelocity / 5);
 }
 
-fn wikipediaColor(escapeVelocity: u32) -> vec3f {
-    return interpolatePalette5Color(WIKIPEDIA, f32(escapeVelocity) / 50);
+fn wikipediaColor(escapeVelocity: f32) -> vec3f {
+    return interpolatePalette5Color(WIKIPEDIA, escapeVelocity / 15 + 0.2);
 }
 
 const ELECTRIC_PALETTE_ID = 0u;
@@ -364,8 +364,8 @@ const RAINBOW_PALETTE_ID = 1u;
 const ZEBRA_PALETTE_ID = 2u;
 const WIKIPEDIA_PALETTE_ID = 3u;
 
-fn getColor(escapeVelocity: u32) -> vec3f {
-    if (escapeVelocity == u.maxIter) {
+fn getColor(escapeVelocity: f32) -> vec3f {
+    if (escapeVelocity >= f32(u.maxIter)) {
         return BLACK;
     }
     switch (u.paletteId) {
@@ -386,22 +386,29 @@ fn getColor(escapeVelocity: u32) -> vec3f {
 
 const FN_MANDELBROT = 0u;
 const FN_JULIA = 1u;
+const BAILOUT = 128;
 
-fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> u32 {
+// Smoothen the escape velocity to avoid having bands of colors
+fn smoothEscapeVelocity(iter: u32, squareMod: f32) -> f32 {
+  return f32(iter) + 1 - log(log(squareMod)) / log(2);
+}
+
+fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> f32 {
     var z = z0;
     for (var i = 0u; i < maxIter; i += 1u) {
         // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complexSquare(z) + c;
 
         // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
-        if (complexSquareMod(z) > 4) {
-            return i;
+        let squareMod = complexSquareMod(z);
+        if (squareMod > BAILOUT * BAILOUT) {
+            return smoothEscapeVelocity(i, squareMod);
         }
     }
-    return maxIter;
+    return f32(maxIter);
 }
 
-fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> u32 {
+fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> f32 {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
     var dz = dz0;
     var z = referenceOrbit[0];
@@ -411,18 +418,19 @@ fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> u32 {
         dz = complexMul(2 * z + dz, dz) + dc;
         z = referenceOrbit[i + 1];
 
-        if (complexSquareMod(z + dz) > 4) {
-            return i;
+        let squareMod = complexSquareMod(z + dz);
+        if (squareMod > BAILOUT * BAILOUT) {
+            return smoothEscapeVelocity(i, squareMod);
         }
     }
-    return maxIter;
+    return f32(maxIter);
 }
 
 // --- Rendering functions
 
 fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     let maxIter = u.maxIter;
-    var escapeVelocity = 0u;
+    var escapeVelocity = 0.0;
     if u.usePerturbation == 0 {
         let pos = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
         switch (u.functionId) {

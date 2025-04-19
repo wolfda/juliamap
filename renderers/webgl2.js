@@ -300,20 +300,20 @@ vec3 getPalette2Color(vec3 palette[2], float index) {
     return palette[int(mod(index, 1.0) * 2.0)];
 }
 
-vec3 rainbowColor(int escapeVelocity) {
-    return interpolatePalette6Color(RAINBOW, float(escapeVelocity) / 200.0);
+vec3 rainbowColor(float escapeVelocity) {
+    return interpolatePalette6Color(RAINBOW, escapeVelocity / 150.0);
 }
 
-vec3 electricColor(int escapeVelocity) {
-    return interpolatePalette2Color(ELECTRIC, float(escapeVelocity) / 200.0);
+vec3 electricColor(float escapeVelocity) {
+    return interpolatePalette2Color(ELECTRIC, escapeVelocity / 100.0);
 }
 
-vec3 zebraColor(int escapeVelocity) {
-    return getPalette2Color(ZEBRA, float(escapeVelocity) / 5.0);
+vec3 zebraColor(float escapeVelocity) {
+    return getPalette2Color(ZEBRA, escapeVelocity / 5.0);
 }
 
-vec3 wikipediaColor(int escapeVelocity) {
-    return interpolatePalette5Color(WIKIPEDIA, float(escapeVelocity) / 50.0);
+vec3 wikipediaColor(float escapeVelocity) {
+    return interpolatePalette5Color(WIKIPEDIA, escapeVelocity / 15.0 + 0.2);
 }
 
 #define ELECTRIC_PALETTE_ID 0
@@ -321,8 +321,8 @@ vec3 wikipediaColor(int escapeVelocity) {
 #define ZEBRA_PALETTE_ID 2
 #define WIKIPEDIA_PALETTE_ID 3
 
-vec3 getColor(int escapeVelocity) {
-    if (escapeVelocity >= uMaxIter) {
+vec3 getColor(float escapeVelocity) {
+    if (escapeVelocity >= float(uMaxIter)) {
         return BLACK;
     }
     switch(uPaletteId) {
@@ -342,6 +342,7 @@ vec3 getColor(int escapeVelocity) {
 
 #define FN_MANDELBROT 0
 #define FN_JULIA 1
+#define BAILOUT 128.0
 
 // Retrieve an orbit point from the uniform buffer.
 vec2 getOrbitPoint(int index) {
@@ -349,21 +350,27 @@ vec2 getOrbitPoint(int index) {
     return (index & 1) == 0 ? point.xy : point.zw;
 }
 
-int julia(vec2 z0, vec2 c) {
+// Smoothen the escape velocity to avoid having bands of colors
+float smoothEscapeVelocity(int iter, float squareMod) {
+  return float(iter) + 1.0 - log(log(squareMod)) / log(2.0);
+}
+
+float julia(vec2 z0, vec2 c) {
     vec2 z = z0;
     for (int i = 0; i < uMaxIter; i++) {
         // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complex_square(z) + c;
 
         // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
-        if (complex_square_mod(z) > 4.0) {
-            return i;
+        float squareMod = complex_square_mod(z);
+        if (squareMod > BAILOUT * BAILOUT) {
+            return smoothEscapeVelocity(i, squareMod);
         }
     }
-    return uMaxIter;
+    return float(uMaxIter);
 }
 
-int juliaPerturb(vec2 dz0, vec2 dc) {
+float juliaPerturb(vec2 dz0, vec2 dc) {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
     vec2 dz = dz0;
     vec2 z = getOrbitPoint(0);
@@ -373,17 +380,18 @@ int juliaPerturb(vec2 dz0, vec2 dc) {
         dz = complex_mul(2.0 * z + dz, dz) + dc;
         z = getOrbitPoint(i + 1);
 
-        if (complex_square_mod(z + dz) > 4.0) {
-            return i;
+        float squareMod = complex_square_mod(z + dz);
+        if (squareMod > BAILOUT * BAILOUT) {
+            return smoothEscapeVelocity(i, squareMod);
         }
     }
-    return uMaxIter;
+    return float(uMaxIter);
 }
 
 // --- Rendering functions
 
 vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
-    int escapeVelocity = 0;
+    float escapeVelocity = 0.0;
     if (uUsePerturb == 0) {
         vec2 pos = uCenterZoom.xy + (fragCoord - 0.5 * uResolution) * scaleFactor;
         switch (uFunctionId) {
