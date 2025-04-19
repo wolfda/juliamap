@@ -59,25 +59,19 @@ body {
 }
 
 .fullscreen {
-  top: 0;
+  z-index: 0;
+  bottom: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 0;
-}
-
-#mandelbrot.minimized {
-  bottom: 3%;
-  left: 3%;
-}
-
-#julia.minimized {
-  bottom: 3%;
-  right: 3%;
+  transition: bottom 0.1s ease-in-out, left 0.1s ease-in-out,
+    width 0.1s ease-in-out, height 0.1s ease-in-out;
 }
 
 .minimized {
   z-index: 1;
+  bottom: 3%;
+  left: 3%;
   width: 20vmin;
   height: 20vmin;
   border: 4px solid white;
