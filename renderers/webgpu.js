@@ -387,20 +387,6 @@ fn getColor(escapeVelocity: u32) -> vec3f {
 const FN_MANDELBROT = 0u;
 const FN_JULIA = 1u;
 
-fn mandelbrot(c: vec2f, maxIter: u32) -> u32 {
-    var z = vec2f(0);
-    for (var i = 0u; i < maxIter; i += 1u) {
-        // Compute z = z² + c, where z² is computed using complex multiplication.
-        z = complexSquare(z) + c;
-
-        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
-        if (complexSquareMod(z) > 4) {
-            return i;
-        }
-    }
-    return maxIter;
-}
-
 fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> u32 {
     var z = z0;
     for (var i = 0u; i < maxIter; i += 1u) {
@@ -415,33 +401,14 @@ fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> u32 {
     return maxIter;
 }
 
-fn mandelbrotPerturb(dc: vec2f, maxIter: u32) -> u32 {
+fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> u32 {
     // We'll do a loop up to maxIter, reading the reference Xₙ and
-    // iterating ∆ₙ = Yₙ - Xₙ.
-    var dz = vec2f(0);
-    var z = referenceOrbit[0];
-
-    for (var i = 0u; i < maxIter; i += 1u) {
-        // dz = (2 * z + dz) * dz + dc
-        dz = complexMul(2 * z + dz, dz) + dc;
-        z = referenceOrbit[i + 1];
-
-        if (complexSquareMod(z + dz) > 4) {
-            return i;
-        }
-    }
-    return maxIter;
-}
-
-fn juliaPerturb(dz0: vec2f, maxIter: u32) -> u32 {
-    // We'll do a loop up to maxIter, reading the reference Xₙ and
-    // iterating ∆ₙ = Yₙ - Xₙ.
     var dz = dz0;
     var z = referenceOrbit[0];
 
     for (var i = 0u; i < maxIter; i += 1u) {
-        // ∆ₙ₊₁ = (2 * Xₙ + ∆ₙ) * ∆ₙ
-        dz = complexMul(2 * z + dz, dz);
+        // ∆z = (2 z + ∆z) ∆z + ∆c 
+        dz = complexMul(2 * z + dz, dz) + dc;
         z = referenceOrbit[i + 1];
 
         if (complexSquareMod(z + dz) > 4) {
@@ -463,17 +430,17 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
                 escapeVelocity = julia(pos, u.param0, maxIter);
             }
             case FN_MANDELBROT, default: {
-                escapeVelocity = mandelbrot(pos, maxIter);
+                escapeVelocity = julia(vec2f(0), pos, maxIter);
             }
         }
     } else {
         let delta = (fragCoord - u.center) * scaleFactor;
         switch (u.functionId) {
             case FN_JULIA: {
-                escapeVelocity = juliaPerturb(delta, maxIter);
+                escapeVelocity = juliaPerturb(delta, vec2f(0), maxIter);
             }
             case FN_MANDELBROT, default: {
-                escapeVelocity = mandelbrotPerturb(delta, maxIter);
+                escapeVelocity = juliaPerturb(vec2f(0), delta, maxIter);
             }
         }
     }

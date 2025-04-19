@@ -14,6 +14,7 @@ export class FractalExplorer {
     renderingEngine,
     options,
     onMapChanged,
+    onDragged,
     onRendered,
   } = {}) {
     const explorer = new FractalExplorer(
@@ -21,6 +22,7 @@ export class FractalExplorer {
       renderingEngine,
       options,
       onMapChanged,
+      onDragged,
       onRendered
     );
     await explorer.#initRenderer();
@@ -32,12 +34,14 @@ export class FractalExplorer {
     renderingEngine,
     options,
     onMapChanged,
+    onDragged,
     onRendered
   ) {
     this.divContainer = divContainer;
     this.renderingEngine = renderingEngine;
     this.options = options;
     this.onMapChanged = onMapChanged;
+    this.onDragged = onDragged;
     this.onRendered = onRendered;
 
     this.map = new MapControl();
@@ -52,6 +56,15 @@ export class FractalExplorer {
     // Debounce/timer for final hi-res render
     this.renderTimeoutId = null;
     this.lastRenderTime = 0;
+
+    this.onMouseDownHandler = this.#onMouseDown.bind(this);
+    this.onMouseMoveHandler = this.#onMouseMove.bind(this);
+    this.onMouseUpHandler = this.#onMouseUp.bind(this);
+    this.onWheelHandler = this.#onWheel.bind(this);
+    this.onTouchStartHandler = this.#onTouchStart.bind(this);
+    this.onTouchMoveHandler = this.#onTouchMove.bind(this);
+    this.onTouchEndHandler = this.#onTouchEnd.bind(this);
+    this.onTouchCancelHandler = this.#onTouchCancel.bind(this);
   }
 
   async #initRenderer() {
@@ -63,7 +76,7 @@ export class FractalExplorer {
       this.map,
       this.renderingEngine
     );
-    this.attach(this.divContainer);
+    this.attach();
   }
 
   #onMouseDown(e) {
@@ -71,14 +84,9 @@ export class FractalExplorer {
     this.lastMousePos = { x: e.clientX, y: e.clientY };
     // Stop any ongoing inertia so we start fresh
     this.map.stop();
-  }
 
-  #onMouseUp() {
-    this.isDragging = false;
-    this.map.animate((x, y, zoom) => {
-      this.#render();
-      this.onMapChanged?.(x, y, zoom);
-    });
+    document.addEventListener("mousemove", this.onMouseMoveHandler);
+    document.addEventListener("mouseup", this.onMouseUpHandler);
   }
 
   #onMouseMove(e) {
@@ -105,11 +113,22 @@ export class FractalExplorer {
     // Possibly do a real-time quick fractal render
     const now = performance.now();
     if (now - this.lastRenderTime > RENDER_INTERVAL_MS) {
-      this.#render();
+      this.render();
       this.lastRenderTime = now;
     }
 
-    this.onMapChanged?.(this.map.x, this.map.y, this.map.zoom);
+    this.onMapChanged?.();
+    this.onDragged?.();
+  }
+
+  #onMouseUp() {
+    this.isDragging = false;
+    this.map.animate(() => {
+      this.render();
+      this.onMapChanged?.();
+    });
+    document.removeEventListener("mousemove", this.onMouseMoveHandler);
+    document.removeEventListener("mouseup", this.onMouseUpHandler);
   }
 
   #onWheel(e) {
@@ -117,8 +136,8 @@ export class FractalExplorer {
     // Typically, we do pivot logic to zoom around the cursor.
     this.map.stop(); // if you don't want old inertia to continue
 
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
+    const mouseX = e.offsetX;
+    const mouseY = e.offsetY;
 
     // Convert mouse coords to complex plane coords
     const pivot = this.#canvasToComplex(mouseX, mouseY);
@@ -131,8 +150,8 @@ export class FractalExplorer {
     const newPivot = this.#canvasToComplex(mouseX, mouseY);
     this.map.move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
 
-    this.#render();
-    this.onMapChanged?.(this.map.x, this.map.y, this.map.zoom);
+    this.render();
+    this.onMapChanged?.();
   }
 
   #onTouchStart(e) {
@@ -151,6 +170,16 @@ export class FractalExplorer {
       this.initialDistance = getDistance(activeTouches[0], activeTouches[1]);
       this.initialZoom = this.map.zoom;
     }
+
+    document.addEventListener("touchmove", this.onTouchMoveHandler, {
+      passive: false,
+    });
+    document.addEventListener("touchend", this.onTouchEndHandler, {
+      passive: false,
+    });
+    document.addEventListener("touchcancel", this.onTouchCancelHandler, {
+      passive: false,
+    });
   }
 
   #onTouchMove(e) {
@@ -178,8 +207,9 @@ export class FractalExplorer {
 
       this.lastMousePos = { x: touch.clientX, y: touch.clientY };
 
-      this.#render();
-      this.onMapChanged?.(this.map.x, this.map.y, this.map.zoom);
+      this.render();
+      this.onMapChanged?.();
+      this.onDragged?.();
     } else if (activeTouches.length === 2) {
       // Pinch to zoom
       const dist = getDistance(activeTouches[0], activeTouches[1]);
@@ -195,8 +225,8 @@ export class FractalExplorer {
       const newPivot = this.#canvasToComplex(mid.x, mid.y);
       this.map.move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
 
-      this.#render();
-      this.onMapChanged?.(this.map.x, this.map.y, this.map.zoom);
+      this.render();
+      this.onMapChanged?.();
     }
   }
 
@@ -206,55 +236,69 @@ export class FractalExplorer {
     if (activeTouches.length === 0) {
       this.isDragging = false;
       this.map.animate((x, y, zoom) => {
-        this.#render();
-        this.onMapChanged?.(x, y, zoom);
+        this.render();
+        this.onMapChanged?.();
       });
     }
+
+    document.removeEventListener("touchmove", this.onTouchMoveHandler, {
+      passive: false,
+    });
+    document.removeEventListener("touchend", this.onTouchEndHandler, {
+      passive: false,
+    });
+    document.removeEventListener("touchcancel", this.onTouchCancelHandler, {
+      passive: false,
+    });
   }
 
   #onTouchCancel(e) {
     e.preventDefault();
     activeTouches = [];
     this.isDragging = false;
+    document.removeEventListener("touchmove", this.onTouchMoveHandler, {
+      passive: false,
+    });
+    document.removeEventListener("touchend", this.onTouchEndHandler, {
+      passive: false,
+    });
+    document.removeEventListener("touchcancel", this.onTouchCancelHandler, {
+      passive: false,
+    });
   }
 
-  attach(divContainer) {
-    // --- Mouse events ---
-    this.canvas.addEventListener("mousedown", this.#onMouseDown.bind(this));
-    this.canvas.addEventListener("mouseup", this.#onMouseUp.bind(this));
-    this.canvas.addEventListener("mousemove", this.#onMouseMove.bind(this));
-    this.canvas.addEventListener("wheel", this.#onWheel.bind(this), {
-      passive: false,
-    });
-
-    // --- Touch events ---
-    this.canvas.addEventListener("touchstart", this.#onTouchStart.bind(this), {
-      passive: false,
-    });
-    this.canvas.addEventListener("touchmove", this.#onTouchMove.bind(this), {
-      passive: false,
-    });
-    this.canvas.addEventListener("touchend", this.#onTouchEnd.bind(this), {
-      passive: false,
-    });
-    this.canvas.addEventListener(
-      "touchcancel",
-      this.#onTouchCancel.bind(this),
-      { passive: false }
-    );
-    divContainer.appendChild(this.canvas);
+  attach() {
+    this.divContainer.appendChild(this.canvas);
   }
 
   detach() {
     this.divContainer.removeChild(this.canvas);
   }
 
+  setInteractive(interactive) {
+    if (interactive) {
+      this.canvas.addEventListener("mousedown", this.onMouseDownHandler);
+      this.canvas.addEventListener("wheel", this.onWheelHandler, {
+        passive: false,
+      });
+      this.canvas.addEventListener("touchstart", this.onTouchStartHandler, {
+        passive: false,
+      });
+    } else {
+      this.canvas.removeEventListener("mousedown", this.onMouseDownHandler);
+      this.canvas.removeEventListener("wheel", this.onWheelHandler, {
+        passive: false,
+      });
+      this.canvas.removeEventListener("touchstart", this.onTouchStartHandler, {
+        passive: false,
+      });
+    }
+  }
+
   resize(width, height) {
     this.canvas.width = width * DPR;
     this.canvas.height = height * DPR;
-    this.canvas.style.width = width + "px";
-    this.canvas.style.height = height + "px";
-    this.#render();
+    this.render();
   }
 
   #getDefaultIter() {
@@ -264,7 +308,7 @@ export class FractalExplorer {
   /**
    * Render a quick preview, then schedule a final CPU render.
    */
-  #render() {
+  render() {
     const pixelDensity = this.renderer.id() == RenderingEngine.CPU ? 0.125 : 1;
     const restPixelDensity =
       this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1;
@@ -272,9 +316,10 @@ export class FractalExplorer {
     const deep = this.options.deep ?? this.map.zoom > 16;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const fn = this.options.fn ?? DEFAULT_FN;
+    const options = { pixelDensity, deep, maxIter, palette, fn };
     const renderContext = this.renderer.render(
       this.map,
-      new RenderOptions({ pixelDensity, deep, maxIter, palette, fn })
+      new RenderOptions(options)
     );
     this.onRendered?.(renderContext);
 
@@ -283,13 +328,7 @@ export class FractalExplorer {
       this.renderTimeoutId = setTimeout(() => {
         const renderContext = this.renderer.render(
           this.map,
-          new RenderOptions({
-            pixelDensity: restPixelDensity,
-            deep,
-            maxIter,
-            palette,
-            fn,
-          })
+          new RenderOptions({ ...options, pixelDensity: restPixelDensity })
         );
         this.onRendered?.(renderContext);
       }, 300);
@@ -303,6 +342,68 @@ export class FractalExplorer {
       this.canvas.width,
       this.canvas.height
     );
+  }
+
+  /**
+   * Animate from zoomStart = 2^L_start to zoomEnd = 2^L_end,
+   * by interpolating L in [L_start, L_end].
+   *
+   * - zoomStart: initial zoom level
+   * - zoomEnd: final zoom level
+   * - duration: animation time in ms
+   * - easingFunc(t): takes t in [0..1], returns eased T
+   */
+  animateZoom(zoomStart, zoomEnd, duration) {
+    return new Promise((resolve) => {
+      let startTime = null;
+
+      // Capture the fractal coords of the screen center so we can keep it stable
+      const centerScreen = {
+        x: this.canvas.width / 2 / DPR,
+        y: this.canvas.height / 2 / DPR,
+      };
+      const { cx: centerCx, cy: centerCy } = this.#canvasToComplex(
+        centerScreen.x,
+        centerScreen.y
+      );
+
+      function step(timestamp) {
+        if (!startTime) {
+          startTime = timestamp;
+        }
+        const elapsed = timestamp - startTime;
+        let t = elapsed / duration;
+        if (t > 1) {
+          t = 1; // clamp to 1 at the end
+        }
+
+        // Apply easing to get an eased progress
+        const easedT = easeInOutSine(t);
+
+        // Interpolate L_current
+        const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
+        // Convert exponent -> actual zoom scale
+        this.map.zoomTo(currentZoom);
+
+        // Keep the same fractal point at the screen center
+        const { cx: newCx, cy: newCy } = this.#canvasToComplex(
+          centerScreen.x,
+          centerScreen.y
+        );
+        this.map.move(centerCx - newCx, centerCy - newCy);
+
+        // Render a quick preview
+        this.render();
+
+        if (t < 1) {
+          requestAnimationFrame(step.bind(this));
+        } else {
+          resolve();
+        }
+      }
+
+      requestAnimationFrame(step.bind(this));
+    });
   }
 }
 
@@ -323,4 +424,9 @@ function getMidpoint(t1, t2) {
     x: (t1.clientX + t2.clientX) / 2,
     y: (t1.clientY + t2.clientY) / 2,
   };
+}
+
+function easeInOutSine(t) {
+  // t goes from 0 to 1
+  return 0.5 * (1 - Math.cos(Math.PI * t));
 }

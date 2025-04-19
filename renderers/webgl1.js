@@ -1,4 +1,4 @@
-import { Orbit } from "../julia.js"; // added for deep zoom perturbation
+import { FN_JULIA, FN_MANDELBROT, Orbit } from "../julia.js"; // added for deep zoom perturbation
 import { getPaletteId } from "../palette.js";
 import { hasWebgl1 } from "./capabilities.js";
 import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
@@ -20,6 +20,8 @@ export class Webgl1Renderer extends Renderer {
     this.uSamples = undefined;
     this.uPaletteId = undefined;
     this.uUsePerturb = undefined;
+    this.uFunctionId = undefined;
+    this.uParam0 = undefined;
 
     this.init();
   }
@@ -92,7 +94,8 @@ export class Webgl1Renderer extends Renderer {
     this.uSamples = gl.getUniformLocation(this.webGLProgram, "uSamples");
     this.uPaletteId = gl.getUniformLocation(this.webGLProgram, "uPaletteId");
     this.uUsePerturb = gl.getUniformLocation(this.webGLProgram, "uUsePerturb");
-    // The orbit texture uniforms (uOrbitTex, uOrbitTexSize, uOrbitCount) will be set when needed.
+    this.uFunctionId = gl.getUniformLocation(this.webGLProgram, "uFunctionId");
+    this.uParam0 = gl.getUniformLocation(this.webGLProgram, "uParam0");
 
     // Setup a full-viewport quad.
     const aPosition = gl.getAttribLocation(this.webGLProgram, "aPosition");
@@ -131,14 +134,29 @@ export class Webgl1Renderer extends Renderer {
     gl.uniform1i(this.uSamples, samples);
     gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
     gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
+    gl.uniform1i(this.uFunctionId, options.fn.id);
+    gl.uniform2f(this.uParam0, options.fn.param0.x, options.fn.param0.y);
 
     if (options.deep) {
       // Compute reference orbit for perturbation.
       // Orbit.searchMaxEscapeVelocity is assumed to return an object with:
       //   - sx, sy: the starting point for the orbit,
       //   - iters: a Float32Array of length 2*N containing N vec2 orbit points.
-      const orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
-      // Use the orbit's starting point for the center.
+      let orbit = undefined;
+      switch (options.fn.id) {
+        case FN_MANDELBROT:
+          orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+          break;
+        case FN_JULIA:
+          orbit = Orbit.searchForJulia(
+            map,
+            w,
+            h,
+            options.maxIter,
+            options.fn.param0
+          );
+          break;
+      } // Use the orbit's starting point for the center.
       // Note: y-axis orientation is reversed for WebGL
       gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
       // Create a texture from orbit data.
@@ -220,6 +238,9 @@ uniform int uUsePerturb;       // 0: normal, 1: use perturbation
 uniform sampler2D uOrbitTex;   // orbit texture containing vec2 data in .rg
 uniform vec2 uOrbitTexSize;    // dimensions (width, height) of the orbit texture
 uniform int uOrbitCount;       // number of orbit points stored
+
+uniform int uFunctionId;       // 0: mandelbrot, 1: julia
+uniform vec2 uParam0;          // (x, y) coordinate for julia
 
 // Constants
 #define MAX_ITER 10000
@@ -399,23 +420,52 @@ int getEscapeVelocityPerturb(vec2 delta0) {
     return uMaxIter;
 }
 
-// --- Rendering functions
+int julia(vec2 z0, vec2 c) {
+    vec2 z = z0;
+    for (int i = 0; i < MAX_ITER; i++) {
+        if (i >= uMaxIter) {
+            break;
+        }
+        // Compute z = z² + c, where z² is computed using complex multiplication.
+        z = complex_square(z) + c;
+
+        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
+        if (complex_square_mod(z) > 4.0) {
+            return i;
+        }
+    }
+    return uMaxIter;
+}
+
+int juliaPerturb(vec2 dz0, vec2 dc) {
+    // We'll do a loop up to maxIter, reading the reference Xₙ and
+    vec2 dz = dz0;
+    vec2 z = getOrbitPoint(0);
+
+    for (int i = 0; i < MAX_REF_ORBIT; i++) {
+        if (i >= uMaxIter) {
+            break;
+        }
+        // ∆z = (2 z + ∆z) ∆z + ∆c 
+        dz = complex_mul(2.0 * z + dz, dz) + dc;
+        z = getOrbitPoint(i + 1);
+
+        if (complex_square_mod(z + dz) > 4.0) {
+            return i;
+        }
+    }
+    return uMaxIter;
+}
 
 #define ELECTRIC_PALETTE_ID 0
 #define RAINBOW_PALETTE_ID 1
 #define ZEBRA_PALETTE_ID 2
 #define WIKIPEDIA_PALETTE_ID 3
 
-vec3 renderOne(vec2 sampleCoord, vec2 scaleFactor) {
-    int escapeVelocity = 0;
-    if (uUsePerturb == 0) {
-        vec2 c = vec2(uCenterZoom.x, uCenterZoom.y) + (sampleCoord - 0.5 * uResolution) * scaleFactor;
-        escapeVelocity = getEscapeVelocity(c);
-    } else {
-        vec2 delta0 = (sampleCoord - vec2(uCenterZoom.x, uCenterZoom.y)) * scaleFactor;
-        escapeVelocity = getEscapeVelocityPerturb(delta0);
-    }
+#define FN_MANDELBROT 0
+#define FN_JULIA 1
 
+vec3 getColor(int escapeVelocity) {
     if (escapeVelocity >= uMaxIter) {
         return BLACK;
     } else if (uPaletteId == ELECTRIC_PALETTE_ID) {
@@ -427,6 +477,30 @@ vec3 renderOne(vec2 sampleCoord, vec2 scaleFactor) {
     } else {
         return wikipediaColor(escapeVelocity);
     }
+}
+
+// --- Rendering functions
+
+vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
+    int escapeVelocity = 0;
+    if (uUsePerturb == 0) {
+        vec2 pos = uCenterZoom.xy + (fragCoord - 0.5 * uResolution) * scaleFactor;
+        if (uFunctionId == FN_JULIA) {
+            escapeVelocity = julia(pos, uParam0);
+        } else {
+            escapeVelocity = julia(vec2(0.0), pos);
+        }
+    } else {
+        // let delta = (fragCoord - u.center) * scaleFactor;
+        vec2 delta = (fragCoord - uCenterZoom.xy) * scaleFactor;
+        if (uFunctionId == FN_JULIA) {
+            escapeVelocity = juliaPerturb(delta, vec2(0.0));
+        } else {
+            escapeVelocity = juliaPerturb(vec2(0.0), delta);
+        }
+    }
+
+    return getColor(escapeVelocity);
 }
 
 vec3 renderSuperSample(vec2 sampleCoord, vec2 scaleFactor, int samples) {

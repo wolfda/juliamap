@@ -1,4 +1,4 @@
-import { Orbit } from "../julia.js"; // for deep zoom perturbation
+import { FN_JULIA, FN_MANDELBROT, Orbit } from "../julia.js"; // for deep zoom perturbation
 import { getPaletteId } from "../palette.js";
 import { hasWebgl2 } from "./capabilities.js";
 import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
@@ -92,6 +92,8 @@ void main() {
     this.uPaletteId = gl.getUniformLocation(this.webGLProgram, "uPaletteId");
     this.uUsePerturb = gl.getUniformLocation(this.webGLProgram, "uUsePerturb");
     this.uOrbitCount = gl.getUniformLocation(this.webGLProgram, "uOrbitCount");
+    this.uFunctionId = gl.getUniformLocation(this.webGLProgram, "uFunctionId");
+    this.uParam0 = gl.getUniformLocation(this.webGLProgram, "uParam0");
 
     // Setup a full-screen quad.
     const aPosition = gl.getAttribLocation(this.webGLProgram, "aPosition");
@@ -144,13 +146,29 @@ void main() {
     gl.uniform1i(this.uSamples, samples);
     gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
     gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
+    gl.uniform1i(this.uFunctionId, options.fn.id);
+    gl.uniform2f(this.uParam0, options.fn.param0.x, options.fn.param0.y);
 
     if (options.deep) {
       // Compute reference orbit for perturbation.
       // Orbit.searchMaxEscapeVelocity is expected to return an object with:
       //   - sx, sy: starting point for the orbit,
       //   - iters: a Float32Array containing interleaved vec2 orbit points.
-      const orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+      let orbit = undefined;
+      switch (options.fn.id) {
+        case FN_MANDELBROT:
+          orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+          break;
+        case FN_JULIA:
+          orbit = Orbit.searchForJulia(
+            map,
+            w,
+            h,
+            options.maxIter,
+            options.fn.param0
+          );
+          break;
+      }
       // Use the orbit’s starting point (note: y-axis is flipped for display).
       gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
       // Limit orbit count to the maximum our uniform block supports.
@@ -193,12 +211,14 @@ out vec4 fragColor;
 
 // Uniforms
 uniform vec2 uResolution;      // (width, height)
-uniform vec3 uCenterZoom;      // (centerX, centerY, zoom)
+uniform vec3 uCenterZoom;      // (centerX, centerY, zoom) of mandelbrot
 uniform int uMaxIter;          // dynamic max iterations
 uniform int uSamples;          // supersampling count
 uniform int uPaletteId;        // 0: electric, 1: rainbow, 2: zebra, 3: wikipedia
 uniform int uUsePerturb;       // 0: normal, 1: use perturbation
 uniform int uOrbitCount;       // number of orbit points stored
+uniform int uFunctionId;       // 0: mandelbrot, 1: julia
+uniform vec2 uParam0;          // (x, y) coordinate for julia
 
 // Constants
 #define MAX_ITER ${MAX_ITERATIONS}
@@ -320,16 +340,22 @@ vec3 getColor(int escapeVelocity) {
 
 // --- Julia functions
 
+#define FN_MANDELBROT 0
+#define FN_JULIA 1
+
 // Retrieve an orbit point from the uniform buffer.
 vec2 getOrbitPoint(int index) {
     vec4 point = uOrbitData[index >> 1];
     return (index & 1) == 0 ? point.xy : point.zw;
 }
 
-int getEscapeVelocity(vec2 c) {
-    vec2 z = vec2(0);
+int julia(vec2 z0, vec2 c) {
+    vec2 z = z0;
     for (int i = 0; i < uMaxIter; i++) {
+        // Compute z = z² + c, where z² is computed using complex multiplication.
         z = complex_square(z) + c;
+
+        // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
         if (complex_square_mod(z) > 4.0) {
             return i;
         }
@@ -337,13 +363,17 @@ int getEscapeVelocity(vec2 c) {
     return uMaxIter;
 }
 
-int getEscapeVelocityPerturb(vec2 delta0) {
-    vec2 delta = vec2(0);
-    vec2 Xn = getOrbitPoint(0);
+int juliaPerturb(vec2 dz0, vec2 dc) {
+    // We'll do a loop up to maxIter, reading the reference Xₙ and
+    vec2 dz = dz0;
+    vec2 z = getOrbitPoint(0);
+
     for (int i = 0; i < uMaxIter && i < uOrbitCount - 1; i++) {
-        delta = complex_mul(2.0 * Xn + delta, delta) + delta0;
-        Xn = getOrbitPoint(i + 1);
-        if (complex_square_mod(Xn + delta) > 4.0) {
+        // ∆z = (2 z + ∆z) ∆z + ∆c 
+        dz = complex_mul(2.0 * z + dz, dz) + dc;
+        z = getOrbitPoint(i + 1);
+
+        if (complex_square_mod(z + dz) > 4.0) {
             return i;
         }
     }
@@ -352,14 +382,31 @@ int getEscapeVelocityPerturb(vec2 delta0) {
 
 // --- Rendering functions
 
-vec3 renderOne(vec2 sampleCoord, vec2 scaleFactor) {
+vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
     int escapeVelocity = 0;
     if (uUsePerturb == 0) {
-        vec2 c = vec2(uCenterZoom.x, uCenterZoom.y) + (sampleCoord - 0.5 * uResolution) * scaleFactor;
-        escapeVelocity = getEscapeVelocity(c);
+        vec2 pos = uCenterZoom.xy + (fragCoord - 0.5 * uResolution) * scaleFactor;
+        switch (uFunctionId) {
+            case FN_JULIA:
+                escapeVelocity = julia(pos, uParam0);
+                break;
+            case FN_MANDELBROT:
+            default:
+                escapeVelocity = julia(vec2(0.0), pos);
+                break;
+        }
     } else {
-        vec2 delta0 = (sampleCoord - vec2(uCenterZoom.x, uCenterZoom.y)) * scaleFactor;
-        escapeVelocity = getEscapeVelocityPerturb(delta0);
+        // let delta = (fragCoord - u.center) * scaleFactor;
+        vec2 delta = (fragCoord - uCenterZoom.xy) * scaleFactor;
+        switch (uFunctionId) {
+            case FN_JULIA:
+                escapeVelocity = juliaPerturb(delta, vec2(0.0));
+                break;
+            case FN_MANDELBROT:
+            default:
+                escapeVelocity = juliaPerturb(vec2(0.0), delta);
+                break;
+        }
     }
     return getColor(escapeVelocity);
 }

@@ -1,10 +1,10 @@
 import { RenderOptions } from "./renderers/renderer.js";
-import { FractalExplorer } from "./fractal-explorer.js";
 import { AppState } from "./state.js";
 import { getDefaultRenderingEngine } from "./renderers/renderers.js";
+import { JuliaExplorer, Layout } from "./julia-explorer.js";
 
 let appState = null;
-let fractalExplorer = null;
+let juliaExplorer = null;
 let updateURLTimeoutId = null;
 
 /**
@@ -12,10 +12,8 @@ let updateURLTimeoutId = null;
  * init GPU or WebGL, and do an initial render.
  */
 window.addEventListener("DOMContentLoaded", async () => {
-  const mandelbrotDiv = document.getElementById("mandelbrotDiv");
   appState = AppState.parseFromAddressBar();
-  fractalExplorer = await FractalExplorer.create({
-    divContainer: mandelbrotDiv,
+  juliaExplorer = await JuliaExplorer.create({
     renderingEngine:
       appState.renderingEngine ?? (await getDefaultRenderingEngine()),
     options: new RenderOptions({
@@ -23,33 +21,57 @@ window.addEventListener("DOMContentLoaded", async () => {
       maxIter: appState.maxIter,
       deep: appState.deep,
     }),
-    onMapChanged: updateURL,
+    onChanged: updateURL,
     onRendered: updateRendingEngine,
   });
-  fractalExplorer.map.moveTo(appState.x, appState.y, appState.zoom);
-  fractalExplorer.resize(window.innerWidth, window.innerHeight);
-
+  juliaExplorer.mandelExplorer.map.moveTo(
+    appState.x,
+    appState.y,
+    appState.zoom
+  );
+  juliaExplorer.juliaExplorer.map.moveTo(appState.jx, appState.jy, appState.jzoom);
+  juliaExplorer.setLayout(appState.layout ?? Layout.MANDEL);
+  juliaExplorer.updateJuliaFn();
+  juliaExplorer.resize(window.innerWidth, window.innerHeight);
   window.addEventListener("resize", () => {
-    fractalExplorer.resize(window.innerWidth, window.innerHeight);
+    juliaExplorer.resize(window.innerWidth, window.innerHeight);
   });
 });
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "d") {
-    // Store the current scale
-    const originalZoom = fractalExplorer.map.zoom;
+    let fractalExplorer;
+    switch (juliaExplorer.layout) {
+      case Layout.MANDEL:
+        fractalExplorer = juliaExplorer.mandelExplorer;
+        break;
 
-    // 1) Animate from current 0 to zoom
+      case Layout.JULIA:
+        fractalExplorer = juliaExplorer.juliaExplorer;
+        break;
+
+      case Layout.SPLIT:
+        return;
+    }
+    const originalZoom = fractalExplorer.map.zoom;
     fractalExplorer.animateZoom(0, originalZoom, 12000);
+  } else if (e.key === "s") {
+    juliaExplorer.setLayout(
+      juliaExplorer.layout !== Layout.SPLIT ? Layout.SPLIT : Layout.MANDEL
+    );
   }
 });
 
 function updateURL() {
   clearTimeout(updateURLTimeoutId);
   updateURLTimeoutId = setTimeout(() => {
-    appState.x = fractalExplorer.map.x;
-    appState.y = fractalExplorer.map.y;
-    appState.zoom = fractalExplorer.map.zoom;
+    appState.x = juliaExplorer.mandelExplorer.map.x;
+    appState.y = juliaExplorer.mandelExplorer.map.y;
+    appState.zoom = juliaExplorer.mandelExplorer.map.zoom;
+    appState.jx = juliaExplorer.juliaExplorer.map.x;
+    appState.jy = juliaExplorer.juliaExplorer.map.y;
+    appState.jzoom = juliaExplorer.juliaExplorer.map.zoom;
+    appState.layout = juliaExplorer.layout;
     appState.updateAddressBar();
   }, 200);
 }

@@ -1,5 +1,3 @@
-import { hasWebgl1, hasWebgl2, hasWebgpu } from "./capabilities.js";
-
 export const RenderingEngine = {
   WEBGPU: "webgpu",
   WEBGL1: "webgl1",

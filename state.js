@@ -1,16 +1,20 @@
+import { Complex } from "./complex.js";
+import { Layout } from "./julia-explorer.js";
+
 const BITS_PER_DECIMAL = Math.log10(2);
-const DEFAULT_CENTER = [-0.5, 0];
+const DEFAULT_CENTER = new Complex(-0.5, 0);
+const DEFAULT_LAYOUT = Layout.MANDEL;
 
 export class AppState {
   static parseFromAddressBar() {
     const params = new URLSearchParams(window.location.search);
-    const x = params.has("x")
-      ? parseFloat(params.get("x")) ?? DEFAULT_CENTER[0]
-      : DEFAULT_CENTER[0];
-    const y = params.has("y")
-      ? parseFloat(params.get("y")) ?? DEFAULT_CENTER[1]
-      : DEFAULT_CENTER[1];
-    const zoom = params.has("z") ? parseFloat(params.get("z")) ?? 0 : 0;
+    const x = float(params, "x", DEFAULT_CENTER.x);
+    const y = float(params, "y", DEFAULT_CENTER.y);
+    const zoom = float(params, "z", 0);
+    const jx = float(params, "jx", 0);
+    const jy = float(params, "jy", 0);
+    const jzoom = float(params, "jz", 0);
+    const layout = params.get("layout") ?? DEFAULT_LAYOUT;
     let renderingEngine = params.get("renderer");
     let deep = null;
     if (renderingEngine) {
@@ -22,13 +26,15 @@ export class AppState {
       }
     }
     const palette = params.get("palette");
-    const maxIter = params.has("iter")
-      ? parseInt(params.get("iter")) ?? null
-      : null;
+    const maxIter = int(params, "iter", null);
     return new AppState({
       x,
       y,
       zoom,
+      jx,
+      jy,
+      jzoom,
+      layout,
       renderingEngine,
       palette,
       maxIter,
@@ -36,10 +42,30 @@ export class AppState {
     });
   }
 
-  constructor({ x, y, zoom, renderingEngine, palette, maxIter, deep }) {
+  constructor({
+    x,
+    y,
+    zoom,
+    jx,
+    jy,
+    jzoom,
+    layout,
+    renderingEngine,
+    palette,
+    maxIter,
+    deep,
+  }) {
+    // Mandelbrot coordinates
     this.x = x;
     this.y = y;
     this.zoom = zoom;
+
+    // Julia coordinates
+    this.jx = jx;
+    this.jy = jy;
+    this.jzoom = jzoom;
+
+    this.layout = layout;
     this.renderingEngine = renderingEngine;
     this.palette = palette;
     this.maxIter = maxIter;
@@ -58,6 +84,15 @@ export class AppState {
     params.set("x", this.x.toFixed(precision));
     params.set("y", this.y.toFixed(precision));
     params.set("z", this.zoom.toFixed(2));
+    const jprecision = 3 + Math.ceil(this.jzoom * BITS_PER_DECIMAL);
+    params.set("jx", this.jx.toFixed(jprecision));
+    params.set("jy", this.jy.toFixed(jprecision));
+    params.set("jz", this.jzoom.toFixed(2));
+    if (this.layout !== null && this.layout != DEFAULT_LAYOUT) {
+      params.set("layout", this.layout);
+    } else {
+      params.delete("layout");
+    }
     if (this.renderingEngine) {
       params.set("renderer", this.renderingEngine + (this.deep ? ".deep" : ""));
     }
@@ -71,4 +106,12 @@ export class AppState {
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", newUrl);
   }
+}
+
+function float(params, key, def) {
+  return params.has(key) ? parseFloat(params.get(key)) ?? def : def;
+}
+
+function int(params, key, def) {
+  return params.has(key) ? parseInt(params.get(key)) ?? def : def;
 }

@@ -6,7 +6,11 @@ export const FN_JULIA = 1;
 export class Fn {
   constructor(id, param0) {
     this.id = id;
-    this.param0 = param0 || new Complex(0, 0);
+    this.param0 = param0 ?? new Complex(0, 0);
+  }
+
+  static julia(x, y) {
+    return new Fn(FN_JULIA, new Complex(x, y))
   }
 }
 
