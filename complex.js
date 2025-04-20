@@ -50,6 +50,11 @@ export class Complex {
   squareMod() {
     return this.x * this.x + this.y * this.y;
   }
+
+  // z == a
+  equals(a) {
+    return a instanceof Complex && this.x === a.x && this.y === a.y;
+  }
 }
 
 // Represents the implicit unit of the mantissa.
@@ -83,7 +88,7 @@ export class BigComplexPlane {
     this.exponent = BigInt(exponent);
   }
 
-  /** 
+  /**
    * @param {Number} x
    * @return {BigInt}
    */
@@ -106,7 +111,7 @@ export class BigComplexPlane {
     return x_sign ? -base : base;
   }
 
-  /** 
+  /**
    * @param {BigInt} bx
    * @returns {Number}
    */

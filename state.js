@@ -71,8 +71,16 @@ export class AppState {
 
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
-    params.set("mpos", renderXYZ(this.mcenter, this.mzoom));
-    params.set("jpos", renderXYZ(this.jcenter, this.jzoom));
+    if (renderXYZ(this.mcenter, this.mzoom) !== renderXYZ(DEFAULT_CENTER[0], DEFAULT_CENTER[1])) {
+      params.set("mpos", renderXYZ(this.mcenter, this.mzoom));
+    } else {
+      params.delete("mpos");
+    }
+    if (renderXYZ(this.jcenter, this.jzoom) !== renderXYZ(ZERO_CENTER[0], ZERO_CENTER[1])) {
+      params.set("jpos", renderXYZ(this.jcenter, this.jzoom));
+    } else {
+      params.delete("jpos");
+    }
     if (this.layout !== null && this.layout != DEFAULT_LAYOUT) {
       params.set("layout", this.layout);
     } else {
@@ -88,7 +96,8 @@ export class AppState {
       params.set("palette", this.palette);
     }
 
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    const queryParams = params.toString();
+    const newUrl = queryParams ? `${window.location.pathname}?${queryParams}` : window.location.pathname;
     window.history.replaceState({}, "", newUrl);
   }
 }
@@ -113,12 +122,16 @@ function parseXYZ(xyz, def) {
 function renderXYZ(center, zoom) {
   const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
   return [
-    center.x.toFixed(precision),
-    center.y.toFixed(precision),
-    zoom.toFixed(2),
+    truncatePrecision(center.x ?? 0, precision),
+    truncatePrecision(center.y ?? 0, precision),
+    truncatePrecision(zoom ?? 0, 2),
   ].join("_");
 }
 
 function int(params, key, def) {
   return params.has(key) ? parseInt(params.get(key)) ?? def : def;
+}
+
+function truncatePrecision(x, precision) {
+  return parseFloat(x.toFixed(precision));
 }
