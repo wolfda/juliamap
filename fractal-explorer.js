@@ -1,3 +1,4 @@
+import { Complex } from "./complex.js";
 import { DEFAULT_FN } from "./julia.js";
 import { MapControl } from "./map.js";
 import { Palette } from "./palette.js";
@@ -101,12 +102,8 @@ export class FractalExplorer {
     );
     const newPos = this.#canvasToComplex(e.clientX, e.clientY);
 
-    // Delta in fractal coords
-    const dx = oldPos.cx - newPos.cx;
-    const dy = oldPos.cy - newPos.cy;
-
-    // Move the map
-    this.map.move(dx, dy);
+    // Move the map by the delta
+    this.map.move(oldPos.sub(newPos));
 
     this.lastMousePos = { x: e.clientX, y: e.clientY };
 
@@ -143,12 +140,11 @@ export class FractalExplorer {
     const pivot = this.#canvasToComplex(mouseX, mouseY);
 
     // Zoom factor
-    const dzoom = -e.deltaY * 0.002;
-    this.map.zoomBy(dzoom);
+    this.map.zoomBy(-e.deltaY * 0.002);
 
     // Keep cursor point stable => shift center
     const newPivot = this.#canvasToComplex(mouseX, mouseY);
-    this.map.move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
+    this.map.move(pivot.sub(newPivot));
 
     this.render();
     this.onMapChanged?.();
@@ -199,11 +195,7 @@ export class FractalExplorer {
       );
       const newPos = this.#canvasToComplex(touch.clientX, touch.clientY);
 
-      // Delta in fractal space
-      const dx = oldPos.cx - newPos.cx;
-      const dy = oldPos.cy - newPos.cy;
-
-      this.map.move(dx, dy);
+      this.map.move(oldPos.sub(newPos));
 
       this.lastMousePos = { x: touch.clientX, y: touch.clientY };
 
@@ -221,9 +213,9 @@ export class FractalExplorer {
 
       this.map.zoomTo(this.initialZoom + dzoom);
 
-      // Keep pivot point stable => shift center
+      // Keep pivot point stable => shift center      
       const newPivot = this.#canvasToComplex(mid.x, mid.y);
-      this.map.move(pivot.cx - newPivot.cx, pivot.cy - newPivot.cy);
+      this.map.move(pivot.sub(newPivot));
 
       this.render();
       this.onMapChanged?.();
@@ -235,7 +227,7 @@ export class FractalExplorer {
     const activeTouches = Array.from(e.touches);
     if (activeTouches.length === 0) {
       this.isDragging = false;
-      this.map.animate((x, y, zoom) => {
+      this.map.animate(() => {
         this.render();
         this.onMapChanged?.();
       });

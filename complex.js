@@ -1,19 +1,41 @@
 export class Complex {
   constructor(x, y) {
-    this.x = x;
-    this.y = y;
+    this.x = x ?? 0;
+    this.y = y ?? 0;
   }
 
   // z = a
   set(a) {
     this.x = a.x;
     this.y = a.y;
+    return this;
   }
 
   // z = z + a
   add(a) {
     this.x += a.x;
     this.y += a.y;
+    return this;
+  }
+
+  // z = z - a
+  sub(a) {
+    this.x -= a.x;
+    this.y -= a.y;
+    return this;
+  }
+
+  // z = (x * a, y * (b ?? a))
+  mulScalar(a, b) {
+    this.x *= a;
+    this.y *= b ?? a;
+    return this;
+  }
+
+  divScalar(a, b) {
+    this.x /= a;
+    this.y /= b ?? a;
+    return this;
   }
 
   // z = |z|²
@@ -21,18 +43,7 @@ export class Complex {
     const x = this.x * this.x - this.y * this.y;
     this.y = 2 * this.x * this.y;
     this.x = x;
-  }
-
-  // z = a + b
-  setAdd(a, b) {
-    this.x = a.x + b.x;
-    this.y = a.y + b.y;
-  }
-
-  // z = a²
-  setSquare(a) {
-    this.x = a.x * a.x - a.y * a.y;
-    this.y = 2 * a.x * a.y;
+    return this;
   }
 
   // return |z|²
@@ -129,9 +140,10 @@ export class BigComplex {
     }
   }
 
-  setFromNumbers(x, y) {
+  setScalar(x, y) {
     this.x = this.plane.asBigInt(x);
-    this.y = this.plane.asBigInt(y);
+    this.y = this.plane.asBigInt(y ?? x);
+    return this;
   }
 
   // z = a
@@ -139,6 +151,7 @@ export class BigComplex {
     this.assertSameExponent(a);
     this.x = a.x;
     this.y = a.y;
+    return this;
   }
 
   // z = z + a
@@ -146,6 +159,7 @@ export class BigComplex {
     this.assertSameExponent(a);
     this.x += a.x;
     this.y += a.y;
+    return this;
   }
 
   // z = |z|²
@@ -153,21 +167,7 @@ export class BigComplex {
     const x = (this.x * this.x - this.y * this.y) >> this.plane.exponent;
     this.y = (this.x * this.y) >> (this.plane.exponent - 1n);
     this.x = x;
-  }
-
-  // z = a + b
-  setAdd(a, b) {
-    this.assertSameExponent(a);
-    this.assertSameExponent(b);
-    this.x = a.x + b.x;
-    this.y = a.y + b.y;
-  }
-
-  // z = a²
-  setSquare(a) {
-    this.assertSameExponent(a);
-    this.x = (a.x * a.x - a.y * a.y) >> this.plane.exponent;
-    this.y = (a.x * a.y) >> (this.plane.exponent - 1n);
+    return this;
   }
 
   // return |z|²

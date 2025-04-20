@@ -10,8 +10,8 @@ export class Fn {
     this.param0 = param0 ?? new Complex(0, 0);
   }
 
-  static julia(x, y) {
-    return new Fn(FN_JULIA, new Complex(x, y))
+  static julia(c) {
+    return new Fn(FN_JULIA, new Complex(c.x, c.y));
   }
 }
 
@@ -25,8 +25,7 @@ export function julia(z0, c, maxIter) {
   let z = new Complex(z0.x, z0.y);
   for (let i = 0; i < maxIter; i++) {
     // z = z² + c, where z² is computed using complex multiplication.
-    z.square();
-    z.add(c);
+    z.square().add(c);
 
     // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
     const squareMod = z.squareMod();
@@ -51,8 +50,7 @@ export function juliaSeries(z0, c, count) {
     points[2 * i + 1] = z.y;
 
     // z = z² + c
-    z.square();
-    z.add(c);
+    z.square().add(c);
   }
   return points;
 }
@@ -60,8 +58,7 @@ export function juliaSeries(z0, c, count) {
 export function juliaBigComplex(z, c, maxIter) {
   const bigFour = z.plane.asBigInt(4);
   for (let i = 0; i < maxIter; i++) {
-    z.square();
-    z.add(c);
+    z.square().add(c);
 
     // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
     if (z.squareMod() > bigFour) {
@@ -162,10 +159,7 @@ export class Orbit {
    */
   withEscape(width, height, maxIter) {
     const candidate = this.map.screenToComplex(this.sx, this.sy, width, height);
-    this.escapeVelocity = this.escapeFn(
-      new Complex(candidate.cx, candidate.cy),
-      maxIter
-    );
+    this.escapeVelocity = this.escapeFn(candidate, maxIter);
     return this;
   }
 
@@ -174,10 +168,7 @@ export class Orbit {
    */
   withSeries(width, height, maxIter) {
     const candidate = this.map.screenToComplex(this.sx, this.sy, width, height);
-    this.iters = this.seriesFn(
-      new Complex(candidate.cx, candidate.cy),
-      maxIter
-    );
+    this.iters = this.seriesFn(candidate, maxIter);
     return this;
   }
 }

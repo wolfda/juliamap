@@ -187,7 +187,7 @@ void main() {
       gl.bufferData(gl.UNIFORM_BUFFER, paddedOrbit, gl.STATIC_DRAW);
       gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.orbitBuffer);
     } else {
-      gl.uniform3f(this.uCenterZoom, map.x, map.y, map.zoom);
+      gl.uniform3f(this.uCenterZoom, map.center.x, map.center.y, map.zoom);
     }
 
     // Clear and draw.

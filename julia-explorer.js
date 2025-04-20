@@ -122,7 +122,7 @@ export class JuliaExplorer {
 
   updateJuliaFn() {
     const mandelMap = this.mandelExplorer.map;
-    this.juliaExplorer.options.fn = Fn.julia(mandelMap.x, mandelMap.y);
+    this.juliaExplorer.options.fn = Fn.julia(mandelMap.center);
     this.juliaExplorer.render();
   }
 }

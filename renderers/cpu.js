@@ -63,8 +63,7 @@ export class CpuRenderer extends Renderer {
       const workerData = {
         width: w,
         height: h,
-        centerX: map.x,
-        centerY: map.y,
+        center: map.center,
         zoom: map.zoom,
         startY,
         endY,

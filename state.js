@@ -2,14 +2,15 @@ import { Complex } from "./complex.js";
 import { Layout } from "./julia-explorer.js";
 
 const BITS_PER_DECIMAL = Math.log10(2);
-const DEFAULT_CENTER = [-0.5, 0, 0];
+const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
+const ZERO_CENTER = [new Complex(0, 0), 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
 
 export class AppState {
   static parseFromAddressBar() {
     const params = new URLSearchParams(window.location.search);
-    const [x, y, zoom] = parseXYZ(params.get("mpos"), DEFAULT_CENTER);
-    const [jx, jy, jzoom] = parseXYZ(params.get("jpos"), [0, 0, 0]);
+    const [mcenter, mzoom] = parseXYZ(params.get("mpos"), DEFAULT_CENTER);
+    const [jcenter, jzoom] = parseXYZ(params.get("jpos"), ZERO_CENTER);
     const layout = params.get("layout") ?? DEFAULT_LAYOUT;
     let renderingEngine = params.get("renderer");
     let deep = null;
@@ -24,11 +25,9 @@ export class AppState {
     const palette = params.get("palette");
     const maxIter = int(params, "iter", null);
     return new AppState({
-      x,
-      y,
-      zoom,
-      jx,
-      jy,
+      mcenter,
+      mzoom,
+      jcenter,
       jzoom,
       layout,
       renderingEngine,
@@ -39,11 +38,9 @@ export class AppState {
   }
 
   constructor({
-    x,
-    y,
-    zoom,
-    jx,
-    jy,
+    mcenter,
+    mzoom,
+    jcenter,
     jzoom,
     layout,
     renderingEngine,
@@ -52,13 +49,11 @@ export class AppState {
     deep,
   }) {
     // Mandelbrot coordinates
-    this.x = x;
-    this.y = y;
-    this.zoom = zoom;
+    this.mcenter = mcenter;
+    this.mzoom = mzoom;
 
     // Julia coordinates
-    this.jx = jx;
-    this.jy = jy;
+    this.jcenter = jcenter;
     this.jzoom = jzoom;
 
     this.layout = layout;
@@ -76,8 +71,8 @@ export class AppState {
 
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
-    params.set("mpos", renderXYZ(this.x, this.y, this.zoom));
-    params.set("jpos", renderXYZ(this.jx, this.jy, this.jzoom));
+    params.set("mpos", renderXYZ(this.mcenter, this.mzoom));
+    params.set("jpos", renderXYZ(this.jcenter, this.jzoom));
     if (this.layout !== null && this.layout != DEFAULT_LAYOUT) {
       params.set("layout", this.layout);
     } else {
@@ -107,19 +102,21 @@ function parseXYZ(xyz, def) {
     return def;
   }
   return [
-    parseFloat(components[0]) ?? def[0],
-    parseFloat(components[1]) ?? def[1],
+    new Complex(
+      parseFloat(components[0]) ?? def[0],
+      parseFloat(components[1]) ?? def[1]
+    ),
     parseFloat(components[2]) ?? def[2],
   ];
 }
 
-function renderXYZ(x, y, z) {
-  const precision = 3 + Math.ceil(z * BITS_PER_DECIMAL);
-  return [x.toFixed(precision), y.toFixed(precision), z.toFixed(2)].join("_");
-}
-
-function float(params, key, def) {
-  return params.has(key) ? parseFloat(params.get(key)) ?? def : def;
+function renderXYZ(center, zoom) {
+  const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
+  return [
+    center.x.toFixed(precision),
+    center.y.toFixed(precision),
+    zoom.toFixed(2),
+  ].join("_");
 }
 
 function int(params, key, def) {

@@ -25,11 +25,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     onRendered: updateRendingEngine,
   });
   juliaExplorer.mandelExplorer.map.moveTo(
-    appState.x,
-    appState.y,
-    appState.zoom
+    appState.mcenter,
+    appState.mzoom
   );
-  juliaExplorer.juliaExplorer.map.moveTo(appState.jx, appState.jy, appState.jzoom);
+  juliaExplorer.juliaExplorer.map.moveTo(appState.jcenter, appState.jzoom);
   juliaExplorer.setLayout(appState.layout ?? Layout.MANDEL);
   juliaExplorer.updateJuliaFn();
   juliaExplorer.resize(window.innerWidth, window.innerHeight);
@@ -65,11 +64,9 @@ document.addEventListener("keydown", (e) => {
 function updateURL() {
   clearTimeout(updateURLTimeoutId);
   updateURLTimeoutId = setTimeout(() => {
-    appState.x = juliaExplorer.mandelExplorer.map.x;
-    appState.y = juliaExplorer.mandelExplorer.map.y;
-    appState.zoom = juliaExplorer.mandelExplorer.map.zoom;
-    appState.jx = juliaExplorer.juliaExplorer.map.x;
-    appState.jy = juliaExplorer.juliaExplorer.map.y;
+    appState.mcenter = juliaExplorer.mandelExplorer.map.center;
+    appState.mzoom = juliaExplorer.mandelExplorer.map.zoom;
+    appState.jcenter = juliaExplorer.juliaExplorer.map.center;
     appState.jzoom = juliaExplorer.juliaExplorer.map.zoom;
     appState.layout = juliaExplorer.layout;
     appState.updateAddressBar();

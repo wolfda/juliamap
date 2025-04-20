@@ -1,5 +1,5 @@
-import { julia, FN_JULIA, FN_MANDELBROT } from "../julia.js";
-import { Complex } from "../complex.js";
+import { julia, FN_JULIA, FN_MANDELBROT, juliaBigComplex } from "../julia.js";
+import { BigComplexPlane, Complex } from "../complex.js";
 import {
   BLACK,
   ELECTRIC_PALETTE_ID,
@@ -17,8 +17,7 @@ onmessage = function (e) {
     const {
       width,
       height,
-      centerX,
-      centerY,
+      center,
       zoom,
       startY,
       endY,
@@ -37,34 +36,38 @@ onmessage = function (e) {
 
     // TODO: with BigComplex
     // const complexPlane = new BigComplexPlane(10 + 2 * Math.ceil(zoom));
-    // const z = complexPlane.complex(0, 0);
-    // const c = complexPlane.complex(0, 0);
+    // const zb = complexPlane.complex(0, 0);
+    // const zerob = complexPlane.complex(0, 0);
 
-    for (let py = startY; py < endY; py++) {
-      for (let px = 0; px < width; px++) {
-        // Map (px, py) -> complex plane
-        const scaleFactor = (4.0 / width) * Math.pow(2, -zoom);
-        const x0 = centerX + (px - width / 2) * scaleFactor;
-        const y0 = centerY - (py - height / 2) * scaleFactor;
+    const z = new Complex();
+    const screenPos = new Complex();
+    const halfResolution = new Complex(width / 2, height / 2);
+    const delta = new Complex();
+    const zero = new Complex(0, 0);
+    const scaleFactor = (4.0 / width) * Math.pow(2, -zoom);
+    for (screenPos.y = startY; screenPos.y < endY; screenPos.y++) {
+      for (screenPos.x = 0; screenPos.x < width; screenPos.x++) {
+        // Map screenPos -> complex plane; z = center + (screenPos - 0.5 * resolution) * scaleFactor
+        delta
+          .set(screenPos)
+          .sub(halfResolution)
+          .mulScalar(scaleFactor, -scaleFactor);
+        z.set(center).add(delta);
 
         let escapeVelocity;
         switch (functionId) {
           case FN_JULIA:
-            escapeVelocity = julia(new Complex(x0, y0), param0, maxIter);
+            escapeVelocity = julia(z, param0, maxIter);
             break;
           case FN_MANDELBROT:
           default:
-            escapeVelocity = julia(
-              new Complex(0, 0),
-              new Complex(x0, y0),
-              maxIter
-            );
+            escapeVelocity = julia(zero, z, maxIter);
             // TODO: with BigComplex
-            // z.setFromNumbers(0, 0);
-            // c.setFromNumbers(x0, y0);
+            // zerob.setScalar(0);
+            // zb.setScalar(z.x, z.y);
             // escapeVelocity = juliaBigComplex(
-            //   z,
-            //   c,
+            //   zerob,
+            //   zb,
             //   maxIter,
             // );
             break;
@@ -75,8 +78,8 @@ onmessage = function (e) {
 
         // Calculate index in this chunk's buffer
         // row offset: (py - startY)
-        const rowOffset = py - startY;
-        const idx = (rowOffset * width + px) * 4;
+        const rowOffset = screenPos.y - startY;
+        const idx = (rowOffset * width + screenPos.x) * 4;
         const color = getColor(escapeVelocity, maxIter, paletteId);
         imageDataArray[idx + 0] = color.r;
         imageDataArray[idx + 1] = color.g;

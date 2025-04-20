@@ -157,8 +157,8 @@ export class WebgpuRenderer extends Renderer {
     const dataView = new DataView(uniformArray);
     dataView.setUint32(0, options.deep ? 1 : 0, true); // usePerturbation
     dataView.setFloat32(4, map.zoom, true); // zoom
-    dataView.setFloat32(8, orbit ? orbit.sx : map.x, true); // center
-    dataView.setFloat32(12, orbit ? orbit.sy : map.y, true); // center
+    dataView.setFloat32(8, orbit ? orbit.sx : map.center.x, true); // center
+    dataView.setFloat32(12, orbit ? orbit.sy : map.center.y, true); // center
     dataView.setFloat32(16, w, true); // resolution
     dataView.setFloat32(20, h, true); // resolution
     dataView.setUint32(24, options.maxIter, true); // maxIter

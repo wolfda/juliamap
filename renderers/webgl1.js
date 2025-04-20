@@ -205,7 +205,7 @@ export class Webgl1Renderer extends Renderer {
       );
       gl.uniform1i(uOrbitCountLocation, orbitCount);
     } else {
-      gl.uniform3f(this.uCenterZoom, map.x, map.y, map.zoom);
+      gl.uniform3f(this.uCenterZoom, map.center.x, map.center.y, map.zoom);
     }
 
     // Clear and draw.
