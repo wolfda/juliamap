@@ -202,7 +202,3 @@ export class MapControl {
   }
 }
 
-function easeInOutSine(t) {
-  // t goes from 0 to 1
-  return 0.5 * (1 - Math.cos(Math.PI * t));
-}

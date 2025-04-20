@@ -400,12 +400,9 @@ export class FractalExplorer {
         x: this.canvas.width / 2 / DPR,
         y: this.canvas.height / 2 / DPR,
       };
-      const { cx: centerCx, cy: centerCy } = this.#canvasToComplex(
-        centerScreen.x,
-        centerScreen.y
-      );
+      const pivot = this.#canvasToComplex(centerScreen.x, centerScreen.y);
 
-      function step(timestamp) {
+      function tick(timestamp) {
         if (!startTime) {
           startTime = timestamp;
         }
@@ -424,23 +421,20 @@ export class FractalExplorer {
         this.map.zoomTo(currentZoom);
 
         // Keep the same fractal point at the screen center
-        const { cx: newCx, cy: newCy } = this.#canvasToComplex(
-          centerScreen.x,
-          centerScreen.y
-        );
-        this.map.move(centerCx - newCx, centerCy - newCy);
+        const newPivot = this.#canvasToComplex(centerScreen.x, centerScreen.y);
+        this.map.move(new Complex().set(pivot).sub(newPivot));
 
         // Render a quick preview
         this.render();
 
         if (t < 1) {
-          requestAnimationFrame(step.bind(this));
+          requestAnimationFrame(tick.bind(this));
         } else {
           resolve();
         }
       }
 
-      requestAnimationFrame(step.bind(this));
+      requestAnimationFrame(tick.bind(this));
     });
   }
 }
