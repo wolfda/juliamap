@@ -53,5 +53,5 @@ function checkWebgl1() {
 
 function checkWebgl2() {
   const canvas = document.createElement("canvas");
-  return canvas.getContext("webgl") !== null;
+  return canvas.getContext("webgl2") !== null;
 }

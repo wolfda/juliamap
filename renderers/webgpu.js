@@ -409,7 +409,6 @@ fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> f32 {
 }
 
 fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> f32 {
-    // We'll do a loop up to maxIter, reading the reference Xₙ and
     var dz = dz0;
     var z = referenceOrbit[0];
 

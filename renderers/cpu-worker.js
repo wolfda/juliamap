@@ -35,6 +35,11 @@ onmessage = function (e) {
     const rowsCount = endY - startY;
     const imageDataArray = new Uint8ClampedArray(width * rowsCount * 4);
 
+    // TODO: with BigComplex
+    // const complexPlane = new BigComplexPlane(10 + 2 * Math.ceil(zoom));
+    // const z = complexPlane.complex(0, 0);
+    // const c = complexPlane.complex(0, 0);
+
     for (let py = startY; py < endY; py++) {
       for (let px = 0; px < width; px++) {
         // Map (px, py) -> complex plane
@@ -54,6 +59,14 @@ onmessage = function (e) {
               new Complex(x0, y0),
               maxIter
             );
+            // TODO: with BigComplex
+            // z.setFromNumbers(0, 0);
+            // c.setFromNumbers(x0, y0);
+            // escapeVelocity = juliaBigComplex(
+            //   z,
+            //   c,
+            //   maxIter,
+            // );
             break;
         }
 

@@ -1,4 +1,4 @@
-import { Complex } from "./complex.js";
+import { BigComplexPlane, Complex } from "./complex.js";
 
 export const FN_MANDELBROT = 0;
 export const FN_JULIA = 1;
@@ -57,32 +57,14 @@ export function juliaSeries(z0, c, count) {
   return points;
 }
 
-// TODO: pass cx, cy in BigInt
-export function juliaBigInt(cx, cy, maxIter, zoomLevel) {
-  const precisionBits = BigInt(10 + 2 * Math.ceil(zoomLevel));
-  const precisionBitsMinusOne = precisionBits - BigInt(1);
-  const big_one = BigInt(1) << precisionBits;
-  const big_four = BigInt(4) << precisionBits;
-
-  // Convert initial coordinates to fixed precision BigInt
-  const big_cx = BigInt(Math.floor(cx * Number(big_one)));
-  const big_cy = BigInt(Math.floor(cy * Number(big_one)));
-
-  let zx = BigInt(0);
-  let zy = BigInt(0);
-  let zx2 = BigInt(0);
-  let zy2 = BigInt(0);
+export function juliaBigComplex(z, c, maxIter) {
+  const bigFour = z.plane.asBigInt(4);
   for (let i = 0; i < maxIter; i++) {
-    // Compute z = z² + c, where z² is computed using complex multiplication.
-    const zxn = zx2 - zy2 + big_cx;
-    const zyn = ((zx * zy) >> precisionBitsMinusOne) + big_cy;
-    zx = zxn;
-    zy = zyn;
-    zx2 = (zx * zx) >> precisionBits;
-    zy2 = (zy * zy) >> precisionBits;
+    z.square();
+    z.add(c);
 
     // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
-    if (zx2 + zy2 > big_four) {
+    if (z.squareMod() > bigFour) {
       return i;
     }
   }

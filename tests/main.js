@@ -1,3 +1,4 @@
+import { BigComplexPlane } from "../complex.js";
 import { DEFAULT_FN } from "../julia.js";
 import { MapControl } from "../map.js";
 import { Palette } from "../palette.js";
@@ -26,6 +27,7 @@ async function testAll() {
   await testRenderer(RenderingEngine.WEBGL1, true);
   await testRenderer(RenderingEngine.WEBGL2, false);
   await testRenderer(RenderingEngine.WEBGL2, true);
+  testBigComplex();
 }
 
 async function testRenderer(renderingEngine, deep) {
@@ -56,4 +58,19 @@ async function testRenderer(renderingEngine, deep) {
     logger.error(engine.padEnd(20) + ": failed");
     console.error(e);
   }
+}
+
+function testBigComplex() {
+  const plane = new BigComplexPlane(8);
+  assertEqual(0, plane.asNumber(plane.asBigInt(0)));
+  assertEqual(1, plane.asNumber(plane.asBigInt(1)));
+  assertEqual(2, plane.asNumber(plane.asBigInt(2)));
+  assertEqual(3, plane.asNumber(plane.asBigInt(3)));
+  assertEqual(-3, plane.asNumber(plane.asBigInt(-3)));
+  assertEqual(30.75, plane.asNumber(plane.asBigInt(30.75)));
+  logger.success("testBigComplex".padEnd(20) + ": success");
+}
+
+function assertEqual(expected, actual) {
+  console.assert(expected == actual, expected + " != " + actual);
 }
