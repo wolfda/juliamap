@@ -53,6 +53,7 @@ export class FractalExplorer {
     this.lastMousePos = { x: 0, y: 0 };
     this.initialDistance = 0;
     this.initialZoom = 0;
+    this.lastTouchEndTime = 0;
 
     // Debounce/timer for final hi-res render
     this.renderTimeoutId = null;
@@ -62,6 +63,7 @@ export class FractalExplorer {
     this.onMouseMoveHandler = this.#onMouseMove.bind(this);
     this.onMouseUpHandler = this.#onMouseUp.bind(this);
     this.onWheelHandler = this.#onWheel.bind(this);
+    this.onDoubleClickHandler = this.#onDoubleClick.bind(this);
     this.onTouchStartHandler = this.#onTouchStart.bind(this);
     this.onTouchMoveHandler = this.#onTouchMove.bind(this);
     this.onTouchEndHandler = this.#onTouchEnd.bind(this);
@@ -150,6 +152,26 @@ export class FractalExplorer {
     this.onMapChanged?.();
   }
 
+  #onDoubleClick(e) {
+    this.map.stop(); // if you don't want old inertia to continue
+
+    const mouseX = e.offsetX;
+    const mouseY = e.offsetY;
+
+    // Convert mouse coords to complex plane coords
+    const pivot = this.#canvasToComplex(mouseX, mouseY);
+
+    // Zoom factor
+    this.map.zoomBy(1);
+
+    // Keep cursor point stable => shift center
+    const newPivot = this.#canvasToComplex(mouseX, mouseY);
+    this.map.move(pivot.sub(newPivot));
+
+    this.render();
+    this.onMapChanged?.();
+  }
+
   #onTouchStart(e) {
     e.preventDefault();
     this.map.stop(); // kill inertia if we have a new touch
@@ -213,7 +235,7 @@ export class FractalExplorer {
 
       this.map.zoomTo(this.initialZoom + dzoom);
 
-      // Keep pivot point stable => shift center      
+      // Keep pivot point stable => shift center
       const newPivot = this.#canvasToComplex(mid.x, mid.y);
       this.map.move(pivot.sub(newPivot));
 
@@ -224,14 +246,36 @@ export class FractalExplorer {
 
   #onTouchEnd(e) {
     e.preventDefault();
-    const activeTouches = Array.from(e.touches);
-    if (activeTouches.length === 0) {
-      this.isDragging = false;
-      this.map.animate(() => {
-        this.render();
-        this.onMapChanged?.();
-      });
+    const now = performance.now();
+    if (now - this.lastTouchEndTime < 300) {
+      this.map.stop(); // if you don't want old inertia to continue
+
+      const mouseX = e.layerX;
+      const mouseY = e.layerY;
+
+      // Convert mouse coords to complex plane coords
+      const pivot = this.#canvasToComplex(mouseX, mouseY);
+
+      // Zoom factor
+      this.map.zoomBy(1);
+
+      // Keep cursor point stable => shift center
+      const newPivot = this.#canvasToComplex(mouseX, mouseY);
+      this.map.move(pivot.sub(newPivot));
+
+      this.render();
+      this.onMapChanged?.();
+    } else {
+      const activeTouches = Array.from(e.touches);
+      if (activeTouches.length === 0) {
+        this.isDragging = false;
+        this.map.animate(() => {
+          this.render();
+          this.onMapChanged?.();
+        });
+      }
     }
+    this.lastTouchEndTime = now;
 
     document.removeEventListener("touchmove", this.onTouchMoveHandler, {
       passive: false,
@@ -273,6 +317,7 @@ export class FractalExplorer {
       this.canvas.addEventListener("wheel", this.onWheelHandler, {
         passive: false,
       });
+      this.canvas.addEventListener("dblclick", this.onDoubleClickHandler);
       this.canvas.addEventListener("touchstart", this.onTouchStartHandler, {
         passive: false,
       });
@@ -281,6 +326,7 @@ export class FractalExplorer {
       this.canvas.removeEventListener("wheel", this.onWheelHandler, {
         passive: false,
       });
+      this.canvas.removeEventListener("dblclick", this.onDoubleClickHandler);
       this.canvas.removeEventListener("touchstart", this.onTouchStartHandler, {
         passive: false,
       });
