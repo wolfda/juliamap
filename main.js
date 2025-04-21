@@ -2,6 +2,7 @@ import { RenderOptions } from "./renderers/renderer.js";
 import { AppState } from "./state.js";
 import { getDefaultRenderingEngine } from "./renderers/renderers.js";
 import { JuliaExplorer, Layout } from "./julia-explorer.js";
+import { Complex } from "./complex.js";
 
 let appState = null;
 let juliaExplorer = null;
@@ -24,10 +25,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     onChanged: updateURL,
     onRendered: updateRendingEngine,
   });
-  juliaExplorer.mandelExplorer.map.moveTo(
-    appState.mcenter,
-    appState.mzoom
-  );
+  juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);
   juliaExplorer.juliaExplorer.map.moveTo(appState.jcenter, appState.jzoom);
   juliaExplorer.setLayout(appState.layout ?? Layout.MANDEL);
   juliaExplorer.updateJuliaFn();
@@ -53,7 +51,11 @@ document.addEventListener("keydown", (e) => {
         return;
     }
     const originalZoom = fractalExplorer.map.zoom;
-    fractalExplorer.animateZoom(0, originalZoom, 12000);
+    const screenCenter = new Complex(
+      fractalExplorer.canvas.width / 2,
+      fractalExplorer.canvas.height / 2,
+    );
+    fractalExplorer.animateZoom(screenCenter, 0, originalZoom, 12000);
   } else if (e.key === "s") {
     juliaExplorer.setLayout(
       juliaExplorer.layout !== Layout.SPLIT ? Layout.SPLIT : Layout.MANDEL

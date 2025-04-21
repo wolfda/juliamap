@@ -5,7 +5,6 @@ import { Palette } from "./palette.js";
 import { RenderingEngine, RenderOptions } from "./renderers/renderer.js";
 import { createRenderer } from "./renderers/renderers.js";
 
-// Device pixel ratio for crisp rendering on high-DPI
 const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
 
@@ -58,6 +57,7 @@ export class FractalExplorer {
     // Debounce/timer for final hi-res render
     this.renderTimeoutId = null;
     this.lastRenderTime = 0;
+    this.zoomAnimationId = null;
 
     this.onMouseDownHandler = this.#onMouseDown.bind(this);
     this.onMouseMoveHandler = this.#onMouseMove.bind(this);
@@ -83,6 +83,10 @@ export class FractalExplorer {
   }
 
   #onMouseDown(e) {
+    if (this.zoomAnimationId) {
+      cancelAnimationFrame(this.zoomAnimationId);
+      this.zoomAnimationId = null;
+    }
     this.isDragging = true;
     this.lastMousePos = { x: e.clientX, y: e.clientY };
     // Stop any ongoing inertia so we start fresh
@@ -130,46 +134,28 @@ export class FractalExplorer {
     document.removeEventListener("mouseup", this.onMouseUpHandler);
   }
 
-  #onWheel(e) {
-    e.preventDefault();
-    // Typically, we do pivot logic to zoom around the cursor.
-    this.map.stop(); // if you don't want old inertia to continue
+  #zoomAt(screenX, screenY, newZoom) {
+    const pivot = this.#canvasToComplex(screenX, screenY);
+    this.map.zoomTo(newZoom);
+    const newPivot = this.#canvasToComplex(screenX, screenY);
 
-    const mouseX = e.offsetX;
-    const mouseY = e.offsetY;
-
-    // Convert mouse coords to complex plane coords
-    const pivot = this.#canvasToComplex(mouseX, mouseY);
-
-    // Zoom factor
-    this.map.zoomBy(-e.deltaY * 0.002);
-
-    // Keep cursor point stable => shift center
-    const newPivot = this.#canvasToComplex(mouseX, mouseY);
+    // Shift the center to keep pivot static
     this.map.move(pivot.sub(newPivot));
 
     this.render();
     this.onMapChanged?.();
   }
 
+  #onWheel(e) {
+    e.preventDefault();
+    this.map.stop();
+    this.#zoomAt(e.offsetX, e.offsetY, this.map.zoom - e.deltaY * 0.002);
+  }
+
   #onDoubleClick(e) {
-    this.map.stop(); // if you don't want old inertia to continue
-
-    const mouseX = e.offsetX;
-    const mouseY = e.offsetY;
-
-    // Convert mouse coords to complex plane coords
-    const pivot = this.#canvasToComplex(mouseX, mouseY);
-
-    // Zoom factor
-    this.map.zoomBy(1);
-
-    // Keep cursor point stable => shift center
-    const newPivot = this.#canvasToComplex(mouseX, mouseY);
-    this.map.move(pivot.sub(newPivot));
-
-    this.render();
-    this.onMapChanged?.();
+    this.map.stop();
+    const screenPos = new Complex(e.layerX, e.layerY);
+    this.animateZoom(screenPos, this.map.zoom, this.map.zoom + 1, 100);
   }
 
   #onTouchStart(e) {
@@ -228,19 +214,8 @@ export class FractalExplorer {
       // Pinch to zoom
       const dist = getDistance(activeTouches[0], activeTouches[1]);
       const dzoom = Math.log2(dist / this.initialDistance);
-
-      // Midpoint in screen coords => pivot
       const mid = getMidpoint(activeTouches[0], activeTouches[1]);
-      const pivot = this.#canvasToComplex(mid.x, mid.y);
-
-      this.map.zoomTo(this.initialZoom + dzoom);
-
-      // Keep pivot point stable => shift center
-      const newPivot = this.#canvasToComplex(mid.x, mid.y);
-      this.map.move(pivot.sub(newPivot));
-
-      this.render();
-      this.onMapChanged?.();
+      this.#zoomAt(mid.x, mid.y, this.initialZoom + dzoom);
     }
   }
 
@@ -248,23 +223,7 @@ export class FractalExplorer {
     e.preventDefault();
     const now = performance.now();
     if (now - this.lastTouchEndTime < 300) {
-      this.map.stop(); // if you don't want old inertia to continue
-
-      const mouseX = e.layerX;
-      const mouseY = e.layerY;
-
-      // Convert mouse coords to complex plane coords
-      const pivot = this.#canvasToComplex(mouseX, mouseY);
-
-      // Zoom factor
-      this.map.zoomBy(1);
-
-      // Keep cursor point stable => shift center
-      const newPivot = this.#canvasToComplex(mouseX, mouseY);
-      this.map.move(pivot.sub(newPivot));
-
-      this.render();
-      this.onMapChanged?.();
+      this.#onDoubleClick(e);
     } else {
       const activeTouches = Array.from(e.touches);
       if (activeTouches.length === 0) {
@@ -391,51 +350,30 @@ export class FractalExplorer {
    * - duration: animation time in ms
    * - easingFunc(t): takes t in [0..1], returns eased T
    */
-  animateZoom(zoomStart, zoomEnd, duration) {
-    return new Promise((resolve) => {
-      let startTime = null;
+  animateZoom(screenPos, zoomStart, zoomEnd, duration) {
+    if (this.zoomAnimationId) {
+      cancelAnimationFrame(this.zoomAnimationId);
+    }
 
-      // Capture the fractal coords of the screen center so we can keep it stable
-      const centerScreen = {
-        x: this.canvas.width / 2 / DPR,
-        y: this.canvas.height / 2 / DPR,
-      };
-      const pivot = this.#canvasToComplex(centerScreen.x, centerScreen.y);
+    let startTime = null;
 
-      function tick(timestamp) {
-        if (!startTime) {
-          startTime = timestamp;
-        }
-        const elapsed = timestamp - startTime;
-        let t = elapsed / duration;
-        if (t > 1) {
-          t = 1; // clamp to 1 at the end
-        }
-
-        // Apply easing to get an eased progress
-        const easedT = easeInOutSine(t);
-
-        // Interpolate L_current
-        const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
-        // Convert exponent -> actual zoom scale
-        this.map.zoomTo(currentZoom);
-
-        // Keep the same fractal point at the screen center
-        const newPivot = this.#canvasToComplex(centerScreen.x, centerScreen.y);
-        this.map.move(new Complex().set(pivot).sub(newPivot));
-
-        // Render a quick preview
-        this.render();
-
-        if (t < 1) {
-          requestAnimationFrame(tick.bind(this));
-        } else {
-          resolve();
-        }
+    function tick(timestamp) {
+      if (!startTime) {
+        startTime = timestamp;
       }
+      const elapsed = timestamp - startTime;
+      let t = Math.min(elapsed / duration, 1);
+      const easedT = easeInOutSine(t);
+      const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
 
-      requestAnimationFrame(tick.bind(this));
-    });
+      this.#zoomAt(screenPos.x, screenPos.y, currentZoom);
+
+      if (t < 1) {
+        this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
+      }
+    }
+
+    this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
   }
 }
 
