@@ -53,9 +53,10 @@ document.addEventListener("keydown", (e) => {
     const originalZoom = fractalExplorer.map.zoom;
     const screenCenter = new Complex(
       fractalExplorer.canvas.width / 2,
-      fractalExplorer.canvas.height / 2,
+      fractalExplorer.canvas.height / 2
     );
-    fractalExplorer.animateZoom(screenCenter, 0, originalZoom, 12000);
+    const duration = originalZoom * 1000 * 0.5; 
+    fractalExplorer.animateZoom(screenCenter, 0, originalZoom, duration);
   } else if (e.key === "s") {
     juliaExplorer.setLayout(
       juliaExplorer.layout !== Layout.SPLIT ? Layout.SPLIT : Layout.MANDEL
