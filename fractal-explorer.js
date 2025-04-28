@@ -7,6 +7,7 @@ import { createRenderer } from "./renderers/renderers.js";
 
 const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
+const FPS_WINDOW_MS = 1000;
 
 export class FractalExplorer {
   static async create({
@@ -68,6 +69,8 @@ export class FractalExplorer {
     this.onTouchMoveHandler = this.#onTouchMove.bind(this);
     this.onTouchEndHandler = this.#onTouchEnd.bind(this);
     this.onTouchCancelHandler = this.#onTouchCancel.bind(this);
+
+    this.fpsMonitor = new FpsMonitor(FPS_WINDOW_MS);
   }
 
   async #initRenderer() {
@@ -79,7 +82,6 @@ export class FractalExplorer {
       this.map,
       this.renderingEngine
     );
-    this.attach();
   }
 
   #onMouseDown(e) {
@@ -292,10 +294,10 @@ export class FractalExplorer {
     }
   }
 
-  resize(width, height) {
+  async resize(width, height) {
     this.canvas.width = width * DPR;
     this.canvas.height = height * DPR;
-    this.render();
+    await this.render();
   }
 
   #getDefaultIter() {
@@ -305,7 +307,7 @@ export class FractalExplorer {
   /**
    * Render a quick preview, then schedule a final CPU render.
    */
-  render() {
+  async render() {
     const pixelDensity = this.renderer.id() == RenderingEngine.CPU ? 0.125 : 1;
     const restPixelDensity =
       this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1;
@@ -314,20 +316,21 @@ export class FractalExplorer {
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const fn = this.options.fn ?? DEFAULT_FN;
     const options = { pixelDensity, deep, maxIter, palette, fn };
-    const renderContext = this.renderer.render(
+    const renderResult = await this.renderer.render(
       this.map,
       new RenderOptions(options)
     );
-    this.onRendered?.(renderContext);
+    this.onRendered?.(renderResult);
+    this.fpsMonitor.addFrame();
 
     clearTimeout(this.renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
-      this.renderTimeoutId = setTimeout(() => {
-        const renderContext = this.renderer.render(
+      this.renderTimeoutId = setTimeout(async () => {
+        const renderResult = await this.renderer.render(
           this.map,
           new RenderOptions({ ...options, pixelDensity: restPixelDensity })
         );
-        this.onRendered?.(renderContext);
+        this.onRendered?.(renderResult);
       }, 300);
     }
   }
@@ -375,6 +378,10 @@ export class FractalExplorer {
 
     this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
   }
+
+  fps() {
+    return this.fpsMonitor.fps();
+  }
 }
 
 /**
@@ -399,4 +406,31 @@ function getMidpoint(t1, t2) {
 function easeInOutSine(t) {
   // t goes from 0 to 1
   return 0.5 * (1 - Math.cos(Math.PI * t));
+}
+
+class FpsMonitor {
+  constructor(windowSizeMillis) {
+    this.frameTimes = [];
+    this.windowSizeMillis = windowSizeMillis;
+  }
+
+  #clearFrames() {
+    const now = performance.now();
+    while (
+      this.frameTimes.length > 0 &&
+      this.frameTimes[0] <= now - this.windowSizeMillis
+    ) {
+      this.frameTimes.shift();
+    }
+  }
+
+  addFrame() {
+    this.frameTimes.push(performance.now());
+    this.#clearFrames();
+  }
+
+  fps() {
+    this.#clearFrames();
+    return Math.floor((1000 * this.frameTimes.length) / this.windowSizeMillis);
+  }
 }

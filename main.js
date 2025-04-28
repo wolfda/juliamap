@@ -4,9 +4,13 @@ import { getDefaultRenderingEngine } from "./renderers/renderers.js";
 import { JuliaExplorer, Layout } from "./julia-explorer.js";
 import { Complex } from "./complex.js";
 
+const MAX_UPDATE_STATS_FREQ = 10;
+
 let appState = null;
 let juliaExplorer = null;
 let updateURLTimeoutId = null;
+let updateStatsTimeoutId = null;
+let lastStatsUpdate = null;
 
 /**
  * On DOMContentLoaded, read URL state, resize canvas, attach events,
@@ -23,7 +27,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       deep: appState.deep,
     }),
     onChanged: updateURL,
-    onRendered: updateRendingEngine,
+    onRendered: updateStats,
   });
   juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);
   juliaExplorer.juliaExplorer.map.moveTo(appState.jcenter, appState.jzoom);
@@ -55,7 +59,7 @@ document.addEventListener("keydown", (e) => {
       fractalExplorer.canvas.width / 2,
       fractalExplorer.canvas.height / 2
     );
-    const duration = originalZoom * 1000 * 0.5; 
+    const duration = originalZoom * 1000 * 0.5;
     fractalExplorer.animateZoom(screenCenter, 0, originalZoom, duration);
   } else if (e.key === "s") {
     juliaExplorer.setLayout(
@@ -76,11 +80,49 @@ function updateURL() {
   }, 200);
 }
 
-/**
- * Update the rendering engine overlay
- * @param renderContext {RenderContext}
- */
-function updateRendingEngine(renderContext) {
-  document.getElementById("flopStats").innerHTML =
-    renderContext.id + (renderContext.options.deep === true ? ".deep" : "");
+function updateStats(renderContext) {
+  if (updateStatsTimeoutId) {
+    clearTimeout(updateStatsTimeoutId);
+  }
+  // Render stats one last time after all renderings are done
+  updateStatsTimeoutId = setTimeout(doUpdateStats, 1000, renderContext);
+
+  // Debounce to not refresh stats faster than MAX_UPDATE_STATS_FREQ
+  const now = performance.now();
+  if (
+    lastStatsUpdate == null ||
+    now - lastStatsUpdate > 1000 / MAX_UPDATE_STATS_FREQ
+  ) {
+    lastStatsUpdate = now;
+    doUpdateStats(renderContext);
+  }
+}
+
+function doUpdateStats(renderContext) {
+  let lines = [];
+  lines.push(
+    renderContext.id + (renderContext.options.deep === true ? ".deep" : "")
+  );
+
+  if (renderContext.flops) {
+    lines.push(floatToHumanReadable(renderContext.flops) + " flops");
+  }
+
+  if (juliaExplorer) {
+    lines.push(juliaExplorer.fps() + " fps");
+  }
+
+  document.getElementById("flopStats").innerHTML = lines.join("<br/>");
+}
+
+function floatToHumanReadable(x) {
+  if (x > 1e9) {
+    return Math.floor(x * 1e-9) + "G";
+  } else if (x > 1e6) {
+    return Math.floor(x * 1e-6) + "M";
+  } else if (x > 1e3) {
+    return Math.floor(x * 1e-3) + "k";
+  } else {
+    return x;
+  }
 }

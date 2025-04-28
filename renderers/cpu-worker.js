@@ -73,8 +73,7 @@ onmessage = function (e) {
             break;
         }
 
-        // iteration count used => escapeVelocity + 1
-        totalIterations += escapeVelocity + 1;
+        totalIterations += Math.floor(escapeVelocity);
 
         // Calculate index in this chunk's buffer
         // row offset: (py - startY)

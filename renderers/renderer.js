@@ -9,9 +9,9 @@ export class Renderer {
   /**
    * @param {MapControl} map
    * @param {RenderOptions} options
-   * @returns {RenderContext}
+   * @returns {RenderResults}
    */
-  render(map, options) {
+  async render(map, options) {
     throw new Error("Not implemented");
   }
 
@@ -34,10 +34,11 @@ export class RenderOptions {
   }
 }
 
-export class RenderContext {
-  constructor(id, options) {
+export class RenderResults {
+  constructor(id, options, flops = null) {
     this.id = id;
     this.options = options;
+    this.flops = flops;
   }
 }
 

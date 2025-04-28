@@ -1,4 +1,4 @@
-import { BigComplexPlane } from "../complex.js";
+import { BigComplexPlane, Complex } from "../complex.js";
 import { DEFAULT_FN } from "../julia.js";
 import { MapControl } from "../map.js";
 import { Palette } from "../palette.js";
@@ -51,7 +51,7 @@ async function testRenderer(renderingEngine, deep) {
       palette: Palette.ELECTRIC,
       fn: DEFAULT_FN,
     });
-    map.moveTo(-0.5, 0, 0);
+    map.moveTo(new Complex(-0.5, 0), 0);
     renderer.render(map, options);
     logger.success(engine.padEnd(20) + ": success");
   } catch (e) {

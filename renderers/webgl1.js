@@ -1,7 +1,7 @@
 import { FN_JULIA, FN_MANDELBROT, Orbit } from "../julia.js"; // added for deep zoom perturbation
 import { getPaletteId } from "../palette.js";
 import { hasWebgl1 } from "./capabilities.js";
-import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
+import { RenderResults, Renderer, RenderingEngine } from "./renderer.js";
 
 export class Webgl1Renderer extends Renderer {
   static create(canvas, ctx) {
@@ -219,7 +219,7 @@ export class Webgl1Renderer extends Renderer {
     this.ctx.drawImage(offscreenCanvas, 0, 0);
     this.ctx.restore();
 
-    return new RenderContext(this.id(), options);
+    return new RenderResults(this.id(), options);
   }
 }
 

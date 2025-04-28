@@ -1,9 +1,10 @@
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../julia.js";
 import { getPaletteId } from "../palette.js";
 import { hasWebgpu } from "./capabilities.js";
-import { Renderer, RenderingEngine, RenderContext } from "./renderer.js";
+import { Renderer, RenderingEngine, RenderResults } from "./renderer.js";
 
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
+const FLOP_PER_ITER = 9;
 
 export class WebgpuRenderer extends Renderer {
   static async create(canvas, ctx) {
@@ -79,6 +80,15 @@ export class WebgpuRenderer extends Renderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // Buffer to store iteration counts
+    this.gpuIterationBuffer = this.gpuDevice.createBuffer({
+      size: 8, // single uint32
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST,
+    });
+
     this.gpuBindGroup = this.gpuDevice.createBindGroup({
       layout: this.gpuPipeline.getBindGroupLayout(0),
       entries: [
@@ -90,10 +100,9 @@ export class WebgpuRenderer extends Renderer {
         },
         {
           binding: 1,
-          resource: {
-            buffer: this.gpuReferenceOrbitBuffer,
-          },
+          resource: { buffer: this.gpuReferenceOrbitBuffer },
         },
+        { binding: 2, resource: { buffer: this.gpuIterationBuffer } },
       ],
     });
   }
@@ -111,7 +120,7 @@ export class WebgpuRenderer extends Renderer {
     document.removeChild(this.offscreenCanvas);
   }
 
-  render(map, options) {
+  async render(map, options) {
     const maxIter = Math.min(options.maxIter, MAX_ITERATIONS);
 
     // ------------------------------------
@@ -178,6 +187,8 @@ export class WebgpuRenderer extends Renderer {
       );
     }
 
+    this.#resetIterationCounter();
+
     // Acquire a texture to render into (offscreen)
     const renderView = this.offscreenGpuContext
       .getCurrentTexture()
@@ -214,7 +225,51 @@ export class WebgpuRenderer extends Renderer {
     this.ctx.drawImage(this.offscreenCanvas, 0, 0);
     this.ctx.restore();
 
-    return new RenderContext(this.id(), options);
+    await this.gpuDevice.queue.onSubmittedWorkDone();
+
+    const iterations = await this.#readIterations();
+    const flops = iterations * FLOP_PER_ITER;
+
+    return new RenderResults(this.id(), options, flops);
+  }
+
+  #resetIterationCounter() {
+    this.gpuDevice.queue.writeBuffer(
+      this.gpuIterationBuffer,
+      0,
+      new Uint32Array([0, 0]).buffer
+    );
+  }
+
+  async #readIterations() {
+    const readBuffer = this.gpuDevice.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
+    const commandEncoder = this.gpuDevice.createCommandEncoder();
+
+    // Copy GPU-side buffer to CPU-readable buffer
+    commandEncoder.copyBufferToBuffer(
+      this.gpuIterationBuffer,
+      0,
+      readBuffer,
+      0,
+      8 // 2 * u32 = 8 bytes
+    );
+    this.gpuDevice.queue.submit([commandEncoder.finish()]);
+
+    // Read asynchronously
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const data = new Uint32Array(readBuffer.getMappedRange());
+
+    const low = data[0];
+    const high = data[1];
+
+    readBuffer.unmap();
+
+    const totalIterations = (BigInt(high) << BigInt(32)) | BigInt(low);
+    return Number(totalIterations);
   }
 }
 
@@ -246,11 +301,19 @@ struct FractalUniforms {
     param0         : vec2f,
 };
 
+struct AtomicU64 {
+    lo: atomic<u32>,
+    hi: atomic<u32>,
+};
+
 @group(0) @binding(0)
 var<uniform> u: FractalUniforms;
 
 @group(0) @binding(1)
 var<storage, read> referenceOrbit: array<vec2f, ${MAX_ITERATIONS}>;
+
+@group(0) @binding(2)
+var<storage, read_write> iterationCounter: AtomicU64;
 
 // --- Math functions
 
@@ -392,6 +455,13 @@ const BAILOUT = 128;
 fn smoothEscapeVelocity(iter: u32, squareMod: f32) -> f32 {
   return f32(iter) + 1 - log(log(squareMod)) / log(2);
 }
+  
+fn incrementIterations(value: u32) {
+    let prev = atomicAdd(&iterationCounter.lo, value);
+    if (prev + value < prev) { // Overflow detected
+        atomicAdd(&iterationCounter.hi, 1u);
+    }
+}
 
 fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> f32 {
     var z = z0;
@@ -402,9 +472,11 @@ fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> f32 {
         // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
         let squareMod = complexSquareMod(z);
         if (squareMod > BAILOUT * BAILOUT) {
+            incrementIterations(i);
             return smoothEscapeVelocity(i, squareMod);
         }
     }
+    incrementIterations(maxIter);
     return f32(maxIter);
 }
 
@@ -419,9 +491,11 @@ fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> f32 {
 
         let squareMod = complexSquareMod(z + dz);
         if (squareMod > BAILOUT * BAILOUT) {
+            incrementIterations(i);
             return smoothEscapeVelocity(i, squareMod);
         }
     }
+    incrementIterations(maxIter);
     return f32(maxIter);
 }
 

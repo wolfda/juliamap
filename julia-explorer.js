@@ -32,7 +32,7 @@ export class JuliaExplorer {
       onRendered,
     });
 
-    return new JuliaExplorer(mandelExplorer, juliaExplorer, onChanged);
+    return await new JuliaExplorer(mandelExplorer, juliaExplorer, onChanged).#init();
   }
 
   constructor(mandelExplorer, juliaExplorer, onChanged) {
@@ -42,22 +42,37 @@ export class JuliaExplorer {
     this.mandelExplorer.onDragged = this.updateJuliaFn.bind(this);
     this.juliaTimeoutId = null;
     this.onClickHandler = this.#onClick.bind(this);
-    this.setLayout(Layout.SPLIT);
   }
 
-  #onClick() {
+  async #init() {
+    await this.setLayout(Layout.SPLIT);
+    this.attach();
+    return this;
+  }
+
+  attach() {
+    this.mandelExplorer.attach();
+    this.juliaExplorer.attach();
+  }
+
+  detach() {
+    this.mandelExplorer.detach();
+    this.juliaExplorer.detach();
+  }
+
+  async #onClick() {
     switch (this.layout) {
       case Layout.MANDEL:
-        this.setLayout(Layout.JULIA);
+        await this.setLayout(Layout.JULIA);
         break;
 
       case Layout.JULIA:
-        this.setLayout(Layout.MANDEL);
+        await this.setLayout(Layout.MANDEL);
         break;
     }
   }
 
-  setLayout(layout) {
+  async setLayout(layout) {
     this.layout = layout;
     this.mandelExplorer.divContainer.removeEventListener("click", this.onClickHandler);
     this.juliaExplorer.divContainer.removeEventListener("click", this.onClickHandler);
@@ -83,46 +98,50 @@ export class JuliaExplorer {
         this.juliaExplorer.setInteractive(true);
         break;
     }
-    this.resize(window.innerWidth, window.innerHeight);
+    await this.resize(window.innerWidth, window.innerHeight);
     this.onChanged?.();
   }
 
-  resize(width, height) {
+  async resize(width, height) {
     // equivalent to css 20vmin
     const minimizedSize = 0.2 * Math.min(width, height);
     switch (this.layout) {
       case Layout.SPLIT:
         const verticalSplit = width > height;
         if (verticalSplit) {
-          this.mandelExplorer.resize(width / 2, height);
-          this.juliaExplorer.resize(width / 2, height);
+          await this.mandelExplorer.resize(width / 2, height);
+          await this.juliaExplorer.resize(width / 2, height);
           this.mandelExplorer.divContainer.className = "vsplit";
           this.juliaExplorer.divContainer.className = "vsplit";
         } else {
-          this.mandelExplorer.resize(width, height / 2);
-          this.juliaExplorer.resize(width, height / 2);
+          await this.mandelExplorer.resize(width, height / 2);
+          await this.juliaExplorer.resize(width, height / 2);
           this.mandelExplorer.divContainer.className = "hsplit";
           this.juliaExplorer.divContainer.className = "hsplit";
         }
         break;
 
       case Layout.MANDEL: {
-        this.mandelExplorer.resize(width, height);
-        this.juliaExplorer.resize(minimizedSize, minimizedSize);
+        await this.mandelExplorer.resize(width, height);
+        await this.juliaExplorer.resize(minimizedSize, minimizedSize);
         break;
       }
 
       case Layout.JULIA: {
-        this.juliaExplorer.resize(width, height);
-        this.mandelExplorer.resize(minimizedSize, minimizedSize);
+        await this.juliaExplorer.resize(width, height);
+        await this.mandelExplorer.resize(minimizedSize, minimizedSize);
         break;
       }
     }
   }
 
-  updateJuliaFn() {
+  fps() {
+    return Math.max(this.mandelExplorer.fps(), this.juliaExplorer.fps());
+  }
+
+  async updateJuliaFn() {
     const mandelMap = this.mandelExplorer.map;
     this.juliaExplorer.options.fn = Fn.julia(mandelMap.center);
-    this.juliaExplorer.render();
+    await this.juliaExplorer.render();
   }
 }

@@ -1,6 +1,6 @@
 import { getPaletteId } from "../palette.js";
 import { getCpuCount } from "./capabilities.js";
-import { RenderContext, Renderer, RenderingEngine } from "./renderer.js";
+import { RenderResults, Renderer, RenderingEngine } from "./renderer.js";
 
 export class CpuRenderer extends Renderer {
   static create(canvas, ctx) {
@@ -129,6 +129,6 @@ export class CpuRenderer extends Renderer {
       // Start the worker
       worker.postMessage(workerData);
     }
-    return new RenderContext(this.id(), options);
+    return new RenderResults(this.id(), options);
   }
 }
