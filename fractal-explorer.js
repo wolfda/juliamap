@@ -8,6 +8,9 @@ import { createRenderer } from "./renderers/renderers.js";
 const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
 const FPS_WINDOW_MS = 1000;
+const TARGET_FRAME_MS = 1000 / 30; // 30fps target
+const MIN_PIXEL_DENSITY = 0.125;
+const MAX_PIXEL_DENSITY = 1;
 
 export class FractalExplorer {
   static async create({
@@ -47,6 +50,7 @@ export class FractalExplorer {
 
     this.map = new MapControl();
     this.renderer = null;
+    this.dynamicPixelDensity = MAX_PIXEL_DENSITY;
 
     // Mouse & touch state
     this.isDragging = false;
@@ -82,6 +86,10 @@ export class FractalExplorer {
       this.map,
       this.renderingEngine
     );
+    this.dynamicPixelDensity =
+      this.renderer.id() === RenderingEngine.CPU
+        ? MIN_PIXEL_DENSITY
+        : MAX_PIXEL_DENSITY;
   }
 
   #onMouseDown(e) {
@@ -308,7 +316,7 @@ export class FractalExplorer {
    * Render a quick preview, then schedule a final CPU render.
    */
   async render() {
-    const pixelDensity = this.renderer.id() == RenderingEngine.CPU ? 0.125 : 1;
+    const pixelDensity = this.dynamicPixelDensity;
     const restPixelDensity =
       this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1;
     const maxIter = this.options.maxIter ?? this.#getDefaultIter();
@@ -316,12 +324,26 @@ export class FractalExplorer {
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const fn = this.options.fn ?? DEFAULT_FN;
     const options = { pixelDensity, deep, maxIter, palette, fn };
+
+    const start = performance.now();
     const renderResult = await this.renderer.render(
       this.map,
       new RenderOptions(options)
     );
+    const latency = performance.now() - start;
+
     this.onRendered?.(renderResult);
     this.fpsMonitor.addFrame();
+
+    // Adjust pixel density for next frame based on latency
+    if (latency > 0 && Number.isFinite(latency)) {
+      const factor = Math.sqrt(TARGET_FRAME_MS / latency);
+      const clamped = Math.min(Math.max(factor, 0.5), 2);
+      this.dynamicPixelDensity = Math.min(
+        MAX_PIXEL_DENSITY,
+        Math.max(MIN_PIXEL_DENSITY, this.dynamicPixelDensity * clamped)
+      );
+    }
 
     clearTimeout(this.renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
