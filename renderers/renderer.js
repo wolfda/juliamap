@@ -26,7 +26,7 @@ export class Renderer {
 
 export class RenderOptions {
   constructor({ pixelDensity, deep, maxIter, palette, fn } = {}) {
-    this.pixelDensity = pixelDensity ?? 1;
+    this.pixelDensity = pixelDensity;
     this.deep = deep;
     this.maxIter = maxIter;
     this.palette = palette;

@@ -1,10 +1,12 @@
 import { Complex } from "./complex.js";
 import { Layout } from "./julia-explorer.js";
+import { Palette } from "./palette.js";
 
 const BITS_PER_DECIMAL = Math.log10(2);
 const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
 const ZERO_CENTER = [new Complex(0, 0), 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
+const DEFAULT_PALETTE = Palette.WIKIPEDIA;
 
 export class AppState {
   static parseFromAddressBar() {
@@ -22,8 +24,12 @@ export class AppState {
         deep = split[1] === "deep";
       }
     }
-    const palette = params.get("palette");
+    let palette = params.get("palette");
+    if (palette === DEFAULT_PALETTE) {
+      palette = null;
+    }
     const maxIter = int(params, "iter", null);
+    const pixelDensity = float(params, "pd", null);
     return new AppState({
       mcenter,
       mzoom,
@@ -33,6 +39,7 @@ export class AppState {
       renderingEngine,
       palette,
       maxIter,
+      pixelDensity,
       deep,
     });
   }
@@ -46,6 +53,7 @@ export class AppState {
     renderingEngine,
     palette,
     maxIter,
+    pixelDensity,
     deep,
   }) {
     // Mandelbrot coordinates
@@ -60,6 +68,7 @@ export class AppState {
     this.renderingEngine = renderingEngine;
     this.palette = palette;
     this.maxIter = maxIter;
+    this.pixelDensity = pixelDensity;
     this.deep = deep;
   }
 
@@ -71,12 +80,18 @@ export class AppState {
 
     // Truncate x and y to the most relevant decimals. 3 decimals required at zoom level 0.
     // Each additional zoom level requires 2 more bits of precision. 1 bit = ~0.30103 decimals.
-    if (renderXYZ(this.mcenter, this.mzoom) !== renderXYZ(DEFAULT_CENTER[0], DEFAULT_CENTER[1])) {
+    if (
+      renderXYZ(this.mcenter, this.mzoom) !==
+      renderXYZ(DEFAULT_CENTER[0], DEFAULT_CENTER[1])
+    ) {
       params.set("mpos", renderXYZ(this.mcenter, this.mzoom));
     } else {
       params.delete("mpos");
     }
-    if (renderXYZ(this.jcenter, this.jzoom) !== renderXYZ(ZERO_CENTER[0], ZERO_CENTER[1])) {
+    if (
+      renderXYZ(this.jcenter, this.jzoom) !==
+      renderXYZ(ZERO_CENTER[0], ZERO_CENTER[1])
+    ) {
       params.set("jpos", renderXYZ(this.jcenter, this.jzoom));
     } else {
       params.delete("jpos");
@@ -88,16 +103,29 @@ export class AppState {
     }
     if (this.renderingEngine) {
       params.set("renderer", this.renderingEngine + (this.deep ? ".deep" : ""));
+    } else {
+      params.delete("renderer");
     }
     if (this.maxIter !== null) {
       params.set("iter", this.maxIter);
+    } else {
+      params.delete("iter");
     }
-    if (this.palette !== null) {
+    if (this.pixelDensity !== null) {
+      params.set("pd", this.pixelDensity);
+    } else {
+      params.delete("pd");
+    }
+    if (this.palette && this.palette !== Palette.WIKIPEDIA) {
       params.set("palette", this.palette);
+    } else {
+      params.delete("palette");
     }
 
     const queryParams = params.toString();
-    const newUrl = queryParams ? `${window.location.pathname}?${queryParams}` : window.location.pathname;
+    const newUrl = queryParams
+      ? `${window.location.pathname}?${queryParams}`
+      : window.location.pathname;
     window.history.replaceState({}, "", newUrl);
   }
 }
@@ -130,6 +158,10 @@ function renderXYZ(center, zoom) {
 
 function int(params, key, def) {
   return params.has(key) ? parseInt(params.get(key)) ?? def : def;
+}
+
+function float(params, key, def) {
+  return params.has(key) ? parseFloat(params.get(key)) ?? def : def;
 }
 
 function truncatePrecision(x, precision) {

@@ -87,9 +87,10 @@ export class FractalExplorer {
       this.renderingEngine
     );
     this.dynamicPixelDensity =
-      this.renderer.id() === RenderingEngine.CPU
+      this.options.pixelDensity ??
+      (this.renderer.id() === RenderingEngine.CPU
         ? MIN_PIXEL_DENSITY
-        : MAX_PIXEL_DENSITY;
+        : MAX_PIXEL_DENSITY);
   }
 
   #onMouseDown(e) {
@@ -316,9 +317,10 @@ export class FractalExplorer {
    * Render a quick preview, then schedule a final CPU render.
    */
   async render() {
-    const pixelDensity = this.dynamicPixelDensity;
+    const pixelDensity = this.options.pixelDensity ?? this.dynamicPixelDensity;
     const restPixelDensity =
-      this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1;
+      this.options.pixelDensity ??
+      (this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1);
     const maxIter = this.options.maxIter ?? this.#getDefaultIter();
     const deep = this.options.deep ?? this.map.zoom > 16;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
@@ -335,8 +337,8 @@ export class FractalExplorer {
     this.onRendered?.(renderResult);
     this.fpsMonitor.addFrame();
 
-    // Adjust pixel density for next frame based on latency
-    if (latency > 0 && Number.isFinite(latency)) {
+    // Adjust pixel density for next frame based on latency only when auto
+    if (this.options.pixelDensity == null && latency > 0 && Number.isFinite(latency)) {
       const factor = Math.sqrt(TARGET_FRAME_MS / latency);
       const clamped = Math.min(Math.max(factor, 0.5), 2);
       this.dynamicPixelDensity = Math.min(

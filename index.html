@@ -43,6 +43,32 @@
     <div id="mandelbrot"></div>
     <div id="julia"></div>
     <div id="flopStats" class="overlay"></div>
+    <div id="gearIcon" class="overlay">&#9881;</div>
+    <div id="controlPanel" class="overlay" style="display: none">
+      <div>renderer</div>
+      <select id="rendererSelect"></select>
+      <div>palette</div>
+      <select id="paletteSelect"></select>
+      <div>max iterations</div>
+      <div>
+        <label><input type="checkbox" id="iterAuto" /> auto</label>
+        <span id="iterValue"></span>
+      </div>
+      <input
+        type="range"
+        id="iterRange"
+        min="10"
+        max="10000"
+        step="10"
+        class="full"
+      />
+      <div>pixel density</div>
+      <div>
+        <label><input type="checkbox" id="pixelDensityAuto" /> auto</label>
+        <span id="pixelDensityValue"></span>
+      </div>
+      <input type="range" id="pixelDensityRange" class="full" />
+    </div>
 
     <a id="github" target="_blank" href="https://github.com/wolfda/juliamap"
       >GitHub</a
