@@ -337,14 +337,17 @@ export class FractalExplorer {
     this.onRendered?.(renderResult);
     this.fpsMonitor.addFrame();
 
-    // Adjust pixel density for next frame based on latency only when auto
+    // Adjust pixel density for next frame when auto.
+    // Only scale it down based on latency to avoid noisy oscillations.
     if (this.options.pixelDensity == null && latency > 0 && Number.isFinite(latency)) {
       const factor = Math.sqrt(TARGET_FRAME_MS / latency);
-      const clamped = Math.min(Math.max(factor, 0.5), 2);
-      this.dynamicPixelDensity = Math.min(
-        MAX_PIXEL_DENSITY,
-        Math.max(MIN_PIXEL_DENSITY, this.dynamicPixelDensity * clamped)
-      );
+      if (factor < 1) {
+        const clamped = Math.max(factor, 0.5);
+        this.dynamicPixelDensity = Math.max(
+          MIN_PIXEL_DENSITY,
+          Math.min(MAX_PIXEL_DENSITY, this.dynamicPixelDensity * clamped)
+        );
+      }
     }
 
     clearTimeout(this.renderTimeoutId);
