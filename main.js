@@ -66,6 +66,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("resize", () => {
     juliaExplorer.resize(window.innerWidth, window.innerHeight);
   });
+  document
+    .getElementById("downloadIcon")
+    .addEventListener("click", downloadViewport);
 });
 
 document.addEventListener("keydown", (e) => {
@@ -258,4 +261,39 @@ function changePixelDensity(pd) {
   juliaExplorer.mandelExplorer.render();
   juliaExplorer.juliaExplorer.render();
   updateURL();
+}
+
+function downloadViewport() {
+  const dpr = window.devicePixelRatio ?? 1;
+  let canvas = null;
+  if (juliaExplorer.layout === Layout.SPLIT) {
+    const verticalSplit = window.innerWidth > window.innerHeight;
+    canvas = document.createElement("canvas");
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    const ctx = canvas.getContext("2d");
+    if (verticalSplit) {
+      ctx.drawImage(juliaExplorer.mandelExplorer.canvas, 0, 0);
+      ctx.drawImage(
+        juliaExplorer.juliaExplorer.canvas,
+        juliaExplorer.mandelExplorer.canvas.width,
+        0
+      );
+    } else {
+      ctx.drawImage(juliaExplorer.mandelExplorer.canvas, 0, 0);
+      ctx.drawImage(
+        juliaExplorer.juliaExplorer.canvas,
+        0,
+        juliaExplorer.mandelExplorer.canvas.height
+      );
+    }
+  } else if (juliaExplorer.layout === Layout.MANDEL) {
+    canvas = juliaExplorer.mandelExplorer.canvas;
+  } else {
+    canvas = juliaExplorer.juliaExplorer.canvas;
+  }
+  const link = document.createElement("a");
+  link.download = "juliamap.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
 }
