@@ -22,6 +22,9 @@ const PAN_FRICTION = 0.94;
 const ZOOM_FRICTION = 0.95;
 const ZERO = new Complex(0, 0);
 
+// Maximum allowed zoom level. Rendering becomes unstable past this point.
+export const MAX_ZOOM = 40;
+
 export class MapControl {
   constructor() {
     this.center = new Complex(0, 0);
@@ -43,7 +46,7 @@ export class MapControl {
    */
   moveTo(center, zoom) {
     this.center.set(center);
-    this.zoom = zoom;
+    this.zoom = Math.min(Math.max(zoom, 0), MAX_ZOOM);
   }
 
   /**
@@ -119,8 +122,8 @@ export class MapControl {
 
     this.zoom += dzoom;
 
-    // Cannot zoom down beyond 0
-    this.zoom = Math.max(this.zoom, 0);
+    // Clamp zoom within allowed range
+    this.zoom = Math.min(Math.max(this.zoom, 0), MAX_ZOOM);
 
     if (dt > 0) {
       // vs is how quickly zoom is changing
@@ -175,9 +178,12 @@ export class MapControl {
       // Zoom with friction (zoom velocity)
       this.zoom += this.vz * dt;
 
-      // If you don't want zoom < 0, clamp it
+      // Clamp zoom within allowed range
       if (this.zoom < 0) {
         this.zoom = 0;
+        this.vz = 0;
+      } else if (this.zoom > MAX_ZOOM) {
+        this.zoom = MAX_ZOOM;
         this.vz = 0;
       }
 
