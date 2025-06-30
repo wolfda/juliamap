@@ -12,6 +12,8 @@ export class CpuRenderer extends Renderer {
     this.canvas = canvas;
     this.ctx = ctx;
     this.currentWorkers = [];
+    this.renderRunning = false;
+    this.pendingRequest = null;
     this.cpuCount = getCpuCount();
     this.offscreenCanvas = document.createElement("canvas");
     this.offscreenCtx = this.offscreenCanvas.getContext("2d");
@@ -28,107 +30,111 @@ export class CpuRenderer extends Renderer {
 
   detach() {}
 
-  render(map, options) {
+  async render(map, options) {
+    const request = {
+      center: { x: map.center.x, y: map.center.y },
+      zoom: map.zoom,
+      options,
+    };
+
+    if (this.renderRunning) {
+      // Replace any pending request with the latest map state
+      this.pendingRequest = request;
+      return new RenderResults(this.id(), options);
+    }
+
+    this.renderRunning = true;
+    let result = await this.#renderInternal(request);
+    this.renderRunning = false;
+
+    if (this.pendingRequest) {
+      const next = this.pendingRequest;
+      this.pendingRequest = null;
+      // Kick off the queued render, but don't await it here
+      this.render(next, next.options);
+    }
+
+    return result;
+  }
+
+  async #renderInternal({ center, zoom, options }) {
     this.terminateWorkers();
 
     const scale = Math.min(options.pixelDensity, 1);
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
 
-    // We'll create an offscreen canvas to combine partial results
     this.offscreenCanvas.width = w;
     this.offscreenCanvas.height = h;
 
-    // This is the final image data that we'll populate from each worker chunk
     const finalImageData = this.offscreenCtx.createImageData(w, h);
-
-    // We'll accumulate total iterations from each chunk
-    let totalIterationsAll = 0;
-    // Track how many workers have finished
     let finishedWorkers = 0;
 
-    // Create a chunk of rows for each worker
-    // e.g. chunkHeight = h / concurrency
     const chunkHeight = Math.ceil(h / this.cpuCount);
 
-    for (let i = 0; i < this.cpuCount; i++) {
-      const startY = i * chunkHeight;
-      const endY = Math.min(startY + chunkHeight, h);
+    return await new Promise((resolve) => {
+      for (let i = 0; i < this.cpuCount; i++) {
+        const startY = i * chunkHeight;
+        const endY = Math.min(startY + chunkHeight, h);
+        if (startY >= endY) {
+          break;
+        }
 
-      // If `startY >= endY`, we skip creating a worker
-      if (startY >= endY) {
-        break;
-      }
+        const workerData = {
+          width: w,
+          height: h,
+          center,
+          zoom,
+          startY,
+          endY,
+          maxIter: options.maxIter,
+          paletteId: getPaletteId(options.palette),
+          functionId: options.fn.id,
+          param0: options.fn.param0,
+        };
 
-      const workerData = {
-        width: w,
-        height: h,
-        center: map.center,
-        zoom: map.zoom,
-        startY,
-        endY,
-        maxIter: options.maxIter,
-        paletteId: getPaletteId(options.palette),
-        functionId: options.fn.id,
-        param0: options.fn.param0,
-      };
+        const worker = new Worker("/renderers/cpu-worker.js", { type: "module" });
+        this.currentWorkers.push(worker);
 
-      const worker = new Worker("/renderers/cpu-worker.js", { type: "module" });
-      this.currentWorkers.push(worker);
+        worker.onmessage = (e) => {
+          if (e.data.error) {
+            console.error("Worker explicit error:", e.data.error);
+            console.error(e.data.stack);
+            worker.terminate();
+            return;
+          }
 
-      worker.onmessage = (e) => {
-        if (e.data.error) {
-          console.error("Worker explicit error:", e.data.error);
-          console.error(e.data.stack);
+          const { imageDataArray, startY: sy } = e.data;
+
+          finalImageData.data.set(imageDataArray, sy * w * 4);
+
+          finishedWorkers++;
           worker.terminate();
-          return;
-        }
 
-        const {
-          imageDataArray,
-          totalIterations,
-          startY: sy,
-          endY: ey,
-        } = e.data;
+          if (finishedWorkers === this.currentWorkers.length) {
+            this.offscreenCtx.putImageData(finalImageData, 0, 0);
+            this.ctx.save();
+            this.ctx.scale(1 / scale, 1 / scale);
+            this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+            this.ctx.restore();
+            this.currentWorkers = [];
+            resolve(new RenderResults(this.id(), options));
+          }
+        };
 
-        // Add this chunk's iterations to global sum
-        totalIterationsAll += totalIterations;
+        worker.onerror = (e) => {
+          console.error(
+            "Worker error:",
+            e.message,
+            "at",
+            e.filename,
+            "line",
+            e.lineno
+          );
+        };
 
-        // Write this worker's chunk (sy .. ey) into our finalImageData
-        finalImageData.data.set(
-          imageDataArray,
-          sy * w * 4 // offset in the final array
-        );
-
-        finishedWorkers++;
-        worker.terminate(); // done with this worker
-
-        // When all workers finish, draw final image to visible canvas
-        if (finishedWorkers === this.currentWorkers.length) {
-          this.offscreenCtx.putImageData(finalImageData, 0, 0);
-
-          // Blit onto the main canvas
-          this.ctx.save();
-          this.ctx.scale(1 / scale, 1 / scale);
-          this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-          this.ctx.restore();
-        }
-      };
-
-      worker.onerror = (e) => {
-        console.error(
-          "Worker error:",
-          e.message,
-          "at",
-          e.filename,
-          "line",
-          e.lineno
-        );
-      };
-
-      // Start the worker
-      worker.postMessage(workerData);
-    }
-    return new RenderResults(this.id(), options);
+        worker.postMessage(workerData);
+      }
+    });
   }
 }
