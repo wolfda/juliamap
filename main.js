@@ -1,19 +1,17 @@
-import { RenderOptions, RenderingEngine } from "./renderers/renderer.js";
-import { AppState } from "./state.js";
+import { RenderOptions } from "./renderers/renderer.js";
+import { appState, StateAttributes } from "./state.js";
 import {
   getDefaultRenderingEngine,
-  isEngineSupported,
+  getSupportedRenderers,
 } from "./renderers/renderers.js";
 import { JuliaExplorer, Layout } from "./julia-explorer.js";
 import { Complex } from "./complex.js";
 import { Palette } from "./palette.js";
 
-import { ControlPanel } from "./control-panel.js";
+import { AppStateEditor } from "./state-editor.js";
 const MAX_UPDATE_STATS_FREQ = 10;
 
-let appState = null;
 let juliaExplorer = null;
-let updateURLTimeoutId = null;
 let controlPanel = null;
 let updateStatsTimeoutId = null;
 let lastStatsUpdate = null;
@@ -23,7 +21,6 @@ let lastStatsUpdate = null;
  * init GPU or WebGL, and do an initial render.
  */
 window.addEventListener("DOMContentLoaded", async () => {
-  appState = AppState.parseFromAddressBar();
   juliaExplorer = await JuliaExplorer.create({
     renderingEngine:
       appState.renderingEngine ?? (await getDefaultRenderingEngine()),
@@ -33,7 +30,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       deep: appState.deep,
       pixelDensity: appState.pixelDensity,
     }),
-    onChanged: updateURL,
+    onChanged: onViewportChanged,
     onRendered: updateStats,
   });
   juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);
@@ -41,28 +38,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   juliaExplorer.setLayout(appState.layout ?? Layout.MANDEL);
   juliaExplorer.updateJuliaFn();
   juliaExplorer.resize(window.innerWidth, window.innerHeight);
-  const rendererOptions = await getSupportedRenderers();
-  controlPanel = new ControlPanel({
-    renderer: appState.renderingEngine ? appState.renderingEngine + (appState.deep ? ".deep" : "") : "auto",
-    palette: appState.palette ?? "wikipedia",
-    maxIter: appState.maxIter,
-    pixelDensity: appState.pixelDensity,
-    renderers: rendererOptions,
-  });
-  controlPanel.addEventListener("rendererChange", async (e) => {
-    await changeRenderer(e.detail);
-  });
-  controlPanel.addEventListener("paletteChange", (e) => {
-    changePalette(e.detail);
-  });
-  controlPanel.addEventListener("maxIterChange", (e) => {
-    changeIter(e.detail);
-  });
-  controlPanel.addEventListener("pixelDensityChange", (e) => {
-    changePixelDensity(e.detail);
-  });
-  controlPanel.updateIterDefault(getDefaultIter());
-  controlPanel.updateDynamicPixelDensity(juliaExplorer.mandelExplorer.dynamicPixelDensity);
+  const supportedRenderers = await getSupportedRenderers();
+  controlPanel = new AppStateEditor(supportedRenderers);
+  appState.addEventListener("change", onAppStateChanged);
   window.addEventListener("resize", () => {
     juliaExplorer.resize(window.innerWidth, window.innerHeight);
   });
@@ -100,28 +78,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-function updateURL() {
-  clearTimeout(updateURLTimeoutId);
-  updateURLTimeoutId = setTimeout(() => {
-    appState.mcenter = juliaExplorer.mandelExplorer.map.center;
-    appState.mzoom = juliaExplorer.mandelExplorer.map.zoom;
-    appState.jcenter = juliaExplorer.juliaExplorer.map.center;
-    appState.jzoom = juliaExplorer.juliaExplorer.map.zoom;
-    appState.layout = juliaExplorer.layout;
-    appState.pixelDensity = juliaExplorer.mandelExplorer.options.pixelDensity;
-    appState.updateAddressBar();
-    if (controlPanel) {
-      controlPanel.updateIterDefault(getDefaultIter());
-      controlPanel.updateDynamicPixelDensity(
-        juliaExplorer.mandelExplorer.dynamicPixelDensity
-      );
-    }
-  }, 200);
-}
 function updateStats(renderContext) {
-  if (updateStatsTimeoutId) {
-    clearTimeout(updateStatsTimeoutId);
-  }
+  clearTimeout(updateStatsTimeoutId);
   // Render stats one last time after all renderings are done
   updateStatsTimeoutId = setTimeout(doUpdateStats, 1000, renderContext);
 
@@ -165,102 +123,83 @@ function floatToHumanReadable(x) {
   }
 }
 
-function getDefaultIter() {
-  return Math.round(200 * (1 + juliaExplorer.mandelExplorer.map.zoom));
+function onViewportChanged() {
+  if (juliaExplorer) {
+    appState.setViewport(
+      juliaExplorer.mandelExplorer.map.center,
+      juliaExplorer.mandelExplorer.map.zoom,
+      juliaExplorer.juliaExplorer.map.center,
+      juliaExplorer.juliaExplorer.map.zoom
+    );
+  }
 }
 
-async function getSupportedRenderers() {
-  const list = [];
-  if (await isEngineSupported(RenderingEngine.WEBGPU)) {
-    list.push("webgpu", "webgpu.deep");
+async function onAppStateChanged(event) {
+  switch (event.detail) {
+    case StateAttributes.VIEWPORT:
+      appState.setDynamicPixelDensity(juliaExplorer.mandelExplorer.dynamicPixelDensity);
+      break;
+    case StateAttributes.RENDERING_ENGINE:
+      await updateRenderer();
+      break;
+    case StateAttributes.PALETTE:
+      updatePalette();
+      break;
+    case StateAttributes.MAX_ITER:
+      updateMaxIter();
+      break;
+    case StateAttributes.PIXEL_DENSITY:
+      updatePixelDensity();
+      break;
   }
-  if (await isEngineSupported(RenderingEngine.WEBGL2)) {
-    list.push("webgl2", "webgl2.deep");
-  }
-  if (await isEngineSupported(RenderingEngine.WEBGL1)) {
-    list.push("webgl1", "webgl1.deep");
-  }
-  if (await isEngineSupported(RenderingEngine.CPU)) {
-    list.push("cpu");
-  }
-  return list;
 }
 
-
-async function changeRenderer(selection) {
-  let renderer = selection;
-  let deep = null;
-  if (selection !== "auto") {
-    const parts = selection.split(".");
-    renderer = parts[0];
-    deep = parts[1] === "deep";
-  } else {
-    renderer = await getDefaultRenderingEngine();
-  }
-  if (
-    renderer === juliaExplorer.mandelExplorer.renderer.id() &&
-    deep === appState.deep
-  ) {
-    return;
-  }
-
-  const mcenter = juliaExplorer.mandelExplorer.map.center;
-  const mzoom = juliaExplorer.mandelExplorer.map.zoom;
-  const jcenter = juliaExplorer.juliaExplorer.map.center;
-  const jzoom = juliaExplorer.juliaExplorer.map.zoom;
-  const layout = juliaExplorer.layout;
-
-  juliaExplorer.detach();
-
+async function updateRenderer() {
+  const renderer =
+    appState.renderingEngine ?? (await getDefaultRenderingEngine());
+    juliaExplorer.detach();
   juliaExplorer = await JuliaExplorer.create({
     renderingEngine: renderer,
     options: new RenderOptions({
       palette: appState.palette,
       maxIter: appState.maxIter,
-      deep: deep,
+      deep: appState.deep,
       pixelDensity: appState.pixelDensity,
     }),
-    onChanged: updateURL,
+    onChanged: onViewportChanged,
     onRendered: updateStats,
   });
-  juliaExplorer.mandelExplorer.map.moveTo(mcenter, mzoom);
-  juliaExplorer.juliaExplorer.map.moveTo(jcenter, jzoom);
-  juliaExplorer.setLayout(layout);
+  juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);
+  juliaExplorer.juliaExplorer.map.moveTo(appState.jcenter, appState.jzoom);
+  juliaExplorer.setLayout(appState.layout);
   juliaExplorer.updateJuliaFn();
-  juliaExplorer.resize(window.innerWidth, window.innerHeight);
-
-  appState.renderingEngine = selection === "auto" ? null : renderer;
-  appState.deep = selection === "auto" ? null : deep;
-  updateURL();
+  // juliaExplorer.resize(window.innerWidth, window.innerHeight);
 }
 
-function changePalette(palette) {
-  appState.palette = palette === "wikipedia" ? null : palette;
+function updatePalette() {
+  const palette = appState.palette ?? Palette.WIKIPEDIA;
   juliaExplorer.mandelExplorer.options.palette = palette;
   juliaExplorer.juliaExplorer.options.palette = palette;
   juliaExplorer.mandelExplorer.render();
   juliaExplorer.juliaExplorer.render();
-  updateURL();
 }
 
-function changeIter(iter) {
-  appState.maxIter = iter;
-  juliaExplorer.mandelExplorer.options.maxIter = iter;
-  juliaExplorer.juliaExplorer.options.maxIter = iter;
+function updateMaxIter() {
+  juliaExplorer.mandelExplorer.options.maxIter = appState.maxIter;
+  juliaExplorer.juliaExplorer.options.maxIter = appState.maxIter;
   juliaExplorer.mandelExplorer.render();
   juliaExplorer.juliaExplorer.render();
-  updateURL();
 }
 
-function changePixelDensity(pd) {
-  appState.pixelDensity = pd;
-  juliaExplorer.mandelExplorer.options.pixelDensity = pd;
-  juliaExplorer.juliaExplorer.options.pixelDensity = pd;
-  juliaExplorer.mandelExplorer.dynamicPixelDensity = pd ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
-  juliaExplorer.juliaExplorer.dynamicPixelDensity = pd ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
+function updatePixelDensity() {
+  juliaExplorer.mandelExplorer.options.pixelDensity = appState.pixelDensity;
+  juliaExplorer.juliaExplorer.options.pixelDensity = appState.pixelDensity;
+  juliaExplorer.mandelExplorer.dynamicPixelDensity =
+    appState.pixelDensity ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
+  juliaExplorer.juliaExplorer.dynamicPixelDensity =
+    appState.pixelDensity ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
   juliaExplorer.mandelExplorer.render();
   juliaExplorer.juliaExplorer.render();
-  updateURL();
 }
 
 function downloadViewport() {

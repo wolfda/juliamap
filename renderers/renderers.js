@@ -42,8 +42,18 @@ export async function isEngineSupported(renderingEngine) {
     case RenderingEngine.WEBGL2:
       return hasWebgl2();
     case RenderingEngine.CPU:
-        return true;
+      return true;
     default:
-        throw new Error("Unknown renderer: " + renderingEngine);
+      throw new Error("Unknown renderer: " + renderingEngine);
   }
+}
+
+export async function getSupportedRenderers() {
+  return (
+    await Promise.all(
+      Object.values(RenderingEngine).map(async (engine) =>
+        (await isEngineSupported(engine)) ? engine : null
+      )
+    )
+  ).filter(Boolean);
 }
