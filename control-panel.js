@@ -16,10 +16,7 @@ const PALETTES = [
   Palette.ELECTRIC,
   Palette.RAINBOW,
   Palette.ZEBRA,
-]
-
-const PIXEL_STEPS = [0.125, 0.25, 0.5, 1, 2, 4, 8];
-
+];
 
 export class ControlPanel extends EventTarget {
   constructor({
@@ -45,7 +42,7 @@ export class ControlPanel extends EventTarget {
       opt.textContent = render;
       this.rendererSelect.appendChild(opt);
     });
-    PALETTES.forEach(palette => {
+    PALETTES.forEach((palette) => {
       const opt = document.createElement("option");
       opt.value = palette;
       opt.textContent = palette;
@@ -73,16 +70,17 @@ export class ControlPanel extends EventTarget {
 
     this.paletteSelect.addEventListener("change", () => {
       this.dispatchEvent(
-        new CustomEvent("paletteChange", {
-          detail: this.paletteSelect.value,
-        })
+        new CustomEvent("paletteChange", { detail: this.paletteSelect.value })
       );
     });
 
     this.iterAuto.addEventListener("change", () => {
+      if (this.iterAuto.checked) {
+        this.iterRange.value = this.defaultIter;
+      }
       this.dispatchEvent(
         new CustomEvent("maxIterChange", {
-          detail: this.iterAuto.checked ? null : parseInt(this.iterRange.value),
+          detail: this.iterAuto.checked ? null : this.iterRange.value,
         })
       );
       this.#updateIterUI();
@@ -98,11 +96,14 @@ export class ControlPanel extends EventTarget {
     });
 
     this.pixelDensityAuto.addEventListener("change", () => {
+      if (this.pixelDensityAuto.checked) {
+        this.pixelDensityRange.value = Math.log2(this.currentPixelDensity);
+      }
       this.dispatchEvent(
         new CustomEvent("pixelDensityChange", {
           detail: this.pixelDensityAuto.checked
             ? null
-            : PIXEL_STEPS[this.pixelDensityRange.value],
+            : Math.pow(2, this.pixelDensityRange.value),
         })
       );
       this.#updatePixelUI();
@@ -111,15 +112,16 @@ export class ControlPanel extends EventTarget {
     this.pixelDensityRange.addEventListener("input", () => {
       this.dispatchEvent(
         new CustomEvent("pixelDensityChange", {
-          detail: PIXEL_STEPS[this.pixelDensityRange.value],
+          detail: this.pixelDensityAuto.checked
+            ? null
+            : Math.pow(2, this.pixelDensityRange.value),
         })
       );
       this.#updatePixelUI();
     });
 
-    this.pixelDensityRange.min = 0;
-    this.pixelDensityRange.max = PIXEL_STEPS.length - 1;
-    this.pixelDensityRange.step = 1;
+    this.pixelDensityRange.min = Math.log2(1 / 8);
+    this.pixelDensityRange.max = Math.log2(8);
 
     this.setState({ renderer, palette, maxIter, pixelDensity });
   }
@@ -137,9 +139,7 @@ export class ControlPanel extends EventTarget {
     }
     if (pixelDensity !== undefined) {
       this.pixelDensityAuto.checked = pixelDensity == null;
-      const idx = PIXEL_STEPS.indexOf(pixelDensity ?? 1);
-      this.pixelDensityRange.value =
-        idx >= 0 ? idx : PIXEL_STEPS.indexOf(1);
+      this.pixelDensityRange.value = pixelDensity ?? 1;
     }
     this.#updateIterUI();
     this.#updatePixelUI();
@@ -147,28 +147,29 @@ export class ControlPanel extends EventTarget {
 
   updateIterDefault(defaultIter) {
     this.defaultIter = defaultIter;
-    this.#updateIterUI();
+    if (this.iterAuto.checked) {
+      this.iterRange.value = defaultIter;
+      this.#updateIterUI();
+    }
   }
 
   updateDynamicPixelDensity(currentPixelDensity) {
     this.currentPixelDensity = currentPixelDensity;
-    this.#updatePixelUI();
+    if (this.pixelDensityAuto.checked) {
+      this.pixelDensityRange.value = Math.log2(currentPixelDensity);
+      this.#updatePixelUI();
+    }
   }
 
   #updateIterUI() {
     this.iterRange.disabled = this.iterAuto.checked;
-    const value = this.iterAuto.checked
-      ? this.defaultIter
-      : this.iterRange.value;
-    this.iterValue.textContent = value;
+    this.iterValue.textContent = this.iterRange.value;
   }
 
   #updatePixelUI() {
     this.pixelDensityRange.disabled = this.pixelDensityAuto.checked;
-    const val = PIXEL_STEPS[parseInt(this.pixelDensityRange.value)];
-    this.pixelDensityValue.textContent = this.#pixelDensityToString(
-      this.pixelDensityAuto.checked ? this.currentPixelDensity : val
-    );
+    const val = parseFloat(Math.pow(2, this.pixelDensityRange.value));
+    this.pixelDensityValue.textContent = this.#pixelDensityToString(val)
   }
 
   #pixelDensityToString(pixelDensity) {
@@ -180,7 +181,7 @@ export class ControlPanel extends EventTarget {
       case 0.5:
         return "1/2";
       default:
-        return Number(pixelDensity.toFixed(3)).toString();
+        return pixelDensity;
     }
   }
 }
