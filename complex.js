@@ -55,6 +55,26 @@ export class Complex {
   equals(a) {
     return a instanceof Complex && this.x === a.x && this.y === a.y;
   }
+
+  toString() {
+    return `Complex(${this.x}, ${this.y})`;
+  }
+}
+
+export class ComplexPlane {
+  complex(x, y) {
+    return new Complex(x, y);
+  }
+
+  project(a) {
+    if (a instanceof Complex) {
+      return a;
+    } else if (a instanceof BigComplex) {
+      return new Complex(a.plane.asNumber(a.x), a.plane.asNumber(a.y));
+    } else {
+      throw new TypeError("Unexpected complex type");
+    }
+  }
 }
 
 // Represents the implicit unit of the mantissa.
@@ -112,14 +132,35 @@ export class BigComplexPlane {
   }
 
   /**
-   * @param {BigInt} bx
+   * @param {BigInt} x
    * @returns {Number}
    */
-  asNumber(bx) {
-    if (bx === 0n) {
+  asNumber(x) {
+    if (x === 0n) {
       return 0;
     }
-    return Number(bx) * Math.pow(2, -Number(this.exponent));
+    return Number(x) * Math.pow(2, -Number(this.exponent));
+  }
+
+  project(a) {
+    if (a instanceof Complex) {
+      return this.complex(a.x, a.y);
+    } else if (a instanceof BigComplex) {
+      const exponentDelta = this.exponent - a.plane.exponent;
+      if (exponentDelta === 0n) {
+        return a;
+      } else if (exponentDelta > 0n) {
+        return new BigComplex(this, a.x << exponentDelta, a.y << exponentDelta);
+      } else {
+        return new BigComplex(
+          this,
+          a.x >> -exponentDelta,
+          a.y >> -exponentDelta
+        );
+      }
+    } else {
+      throw new TypeError("Unexpected complex type");
+    }
   }
 
   complex(x, y) {
@@ -178,5 +219,18 @@ export class BigComplex {
   // return |z|²
   squareMod() {
     return (this.x * this.x + this.y * this.y) >> this.plane.exponent;
+  }
+
+  equals(a) {
+    return (
+      a instanceof BigComplex &&
+      this.plane.exponent === a.plane.exponent &&
+      this.x === a.x &&
+      this.y === a.y
+    );
+  }
+
+  toString() {
+    return `BigComplex(exponent=${this.plane.exponent}, x=${this.x}, y=${this.y})`;
   }
 }

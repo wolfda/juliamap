@@ -1,4 +1,4 @@
-import { BigComplexPlane, Complex } from "../complex.js";
+import { BigComplexPlane, Complex, ComplexPlane } from "../complex.js";
 import { DEFAULT_FN } from "../julia.js";
 import { MapControl } from "../map.js";
 import { Palette } from "../palette.js";
@@ -28,6 +28,7 @@ async function testAll() {
   await testRenderer(RenderingEngine.WEBGL2, false);
   await testRenderer(RenderingEngine.WEBGL2, true);
   testBigComplex();
+  testComplexProject();
 }
 
 async function testRenderer(renderingEngine, deep) {
@@ -71,6 +72,39 @@ function testBigComplex() {
   logger.success("testBigComplex".padEnd(20) + ": success");
 }
 
+function testComplexProject() {
+  const plane = new ComplexPlane();
+  const bigPlane5 = new BigComplexPlane(5);
+  const bigPlane8 = new BigComplexPlane(8);
+
+  const a = plane.complex(3, 4);
+  const biga5 = bigPlane5.complex(3, 4);
+  const biga8 = bigPlane8.complex(3, 4);
+
+  // plane -> bigPlane5
+  assertEquals(bigPlane5.project(a), biga5);
+  assertEquals(plane.project(biga5), a);
+
+  // plane -> bigPlane8
+  assertEquals(bigPlane8.project(a), biga8);
+  assertEquals(plane.project(biga8), a);
+
+  // bigPlane5 -> bigPlane8
+  assertEquals(bigPlane8.project(biga5), biga8);
+  assertEquals(bigPlane5.project(biga8), biga5);
+
+  // Same plane projection
+  assertEqual(plane.project(a), a);
+  assertEqual(bigPlane5.project(biga5), biga5);
+  assertEqual(bigPlane8.project(biga8), biga8);
+  
+  logger.success("testComplexProject".padEnd(20) + ": success");
+}
+
 function assertEqual(expected, actual) {
-  console.assert(expected == actual, expected + " != " + actual);
+  console.assert(expected === actual, expected + " !== " + actual);
+}
+
+function assertEquals(expected, actual) {
+  console.assert(expected.equals(actual), expected + " != " + actual);
 }
