@@ -1,5 +1,5 @@
-import { julia, FN_JULIA, FN_MANDELBROT, juliaBigComplex } from "../julia.js";
-import { BigComplexPlane, Complex } from "../complex.js";
+import { julia, FN_JULIA, FN_MANDELBROT } from "../julia.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../complex.js";
 import {
   BLACK,
   ELECTRIC_PALETTE_ID,
@@ -18,6 +18,7 @@ onmessage = function (e) {
       width,
       height,
       center,
+      centerExponent,
       zoom,
       startY,
       endY,
@@ -25,6 +26,7 @@ onmessage = function (e) {
       maxIter,
       functionId,
       param0,
+      param0Exponent,
     } = e.data;
 
     // We’ll track totalIterations to estimate FLOPS
@@ -34,42 +36,33 @@ onmessage = function (e) {
     const rowsCount = endY - startY;
     const imageDataArray = new Uint8ClampedArray(width * rowsCount * 4);
 
-    // TODO: with BigComplex
-    // const complexPlane = new BigComplexPlane(10 + 2 * Math.ceil(zoom));
-    // const zb = complexPlane.complex(0, 0);
-    // const zerob = complexPlane.complex(0, 0);
-
-    const z = new Complex();
-    const screenPos = new Complex();
-    const halfResolution = new Complex(width / 2, height / 2);
-    const delta = new Complex();
-    const zero = new Complex(0, 0);
+    const plane = complexPlaneForExponent(centerExponent);
+    const centerp = plane.constComplex(center.x, center.y);
+    const param0p = plane.constComplex(param0.x, param0.y);
+    const z = plane.complex();
+    const screenPos = COMPLEX_PLANE.complex();
+    const screenPosp = plane.complex();
+    const halfResolution = plane.constComplex(width / 2, height / 2);
+    const delta = plane.complex();
+    const zero = plane.constComplex(0, 0);
     const scaleFactor = (4.0 / width) * Math.pow(2, -zoom);
     for (screenPos.y = startY; screenPos.y < endY; screenPos.y++) {
       for (screenPos.x = 0; screenPos.x < width; screenPos.x++) {
         // Map screenPos -> complex plane; z = center + (screenPos - 0.5 * resolution) * scaleFactor
         delta
-          .set(screenPos)
+          .set(screenPosp.project(screenPos))
           .sub(halfResolution)
           .mulScalar(scaleFactor, -scaleFactor);
-        z.set(center).add(delta);
+        z.set(centerp).add(delta);
 
         let escapeVelocity;
         switch (functionId) {
           case FN_JULIA:
-            escapeVelocity = julia(z, param0, maxIter);
+            escapeVelocity = julia(z, param0p, maxIter);
             break;
           case FN_MANDELBROT:
           default:
             escapeVelocity = julia(zero, z, maxIter);
-            // TODO: with BigComplex
-            // zerob.setScalar(0);
-            // zb.setScalar(z.x, z.y);
-            // escapeVelocity = juliaBigComplex(
-            //   zerob,
-            //   zb,
-            //   maxIter,
-            // );
             break;
         }
 
@@ -119,4 +112,8 @@ function getColor(escapeVelocity, maxIter, paletteId) {
       return wikipediaColor(escapeVelocity / 15 + 0.2);
     }
   }
+}
+
+function complexPlaneForExponent(exponent) {
+  return exponent ? new BigComplexPlane(exponent) : COMPLEX_PLANE;
 }

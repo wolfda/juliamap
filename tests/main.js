@@ -1,4 +1,4 @@
-import { BigComplexPlane, Complex, ComplexPlane } from "../complex.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../complex.js";
 import { DEFAULT_FN } from "../julia.js";
 import { MapControl } from "../map.js";
 import { Palette } from "../palette.js";
@@ -29,6 +29,7 @@ async function testAll() {
   await testRenderer(RenderingEngine.WEBGL2, true);
   testBigComplex();
   testComplexProject();
+  testScalars();
 }
 
 async function testRenderer(renderingEngine, deep) {
@@ -69,40 +70,63 @@ function testBigComplex() {
   assertEqual(3, plane.asNumber(plane.asBigInt(3)));
   assertEqual(-3, plane.asNumber(plane.asBigInt(-3)));
   assertEqual(30.75, plane.asNumber(plane.asBigInt(30.75)));
+
+  assertEquals(plane.complex(4, 8).divScalar(2, 2), plane.complex(2, 4));
+  assertEquals(plane.complex(4, 8).mulScalar(2, 2), plane.complex(8, 16));
   logger.success("testBigComplex".padEnd(20) + ": success");
 }
 
 function testComplexProject() {
-  const plane = new ComplexPlane();
+  const plane = COMPLEX_PLANE;
   const bigPlane5 = new BigComplexPlane(5);
   const bigPlane8 = new BigComplexPlane(8);
 
-  const a = plane.complex(3, 4);
-  const biga5 = bigPlane5.complex(3, 4);
-  const biga8 = bigPlane8.complex(3, 4);
-
   // plane -> bigPlane5
-  assertEquals(bigPlane5.project(a), biga5);
-  assertEquals(plane.project(biga5), a);
+  assertEquals(plane.complex().project(bigPlane5.complex(3, 4)), plane.complex(3, 4));
+  assertEquals(bigPlane5.complex().project(plane.complex(3, 4)), bigPlane5.complex(3, 4));
 
   // plane -> bigPlane8
-  assertEquals(bigPlane8.project(a), biga8);
-  assertEquals(plane.project(biga8), a);
+  assertEquals(plane.complex().project(bigPlane8.complex(3, 4)), plane.complex(3, 4));
+  assertEquals(bigPlane8.complex().project(plane.complex(3, 4)), bigPlane8.complex(3, 4));
 
   // bigPlane5 -> bigPlane8
-  assertEquals(bigPlane8.project(biga5), biga8);
-  assertEquals(bigPlane5.project(biga8), biga5);
+  assertEquals(bigPlane5.complex().project(bigPlane8.complex(3, 4)), bigPlane5.complex(3, 4));
+  assertEquals(bigPlane8.complex().project(bigPlane5.complex(3, 4)), bigPlane8.complex(3, 4));
 
   // Same plane projection
-  assertEqual(plane.project(a), a);
-  assertEqual(bigPlane5.project(biga5), biga5);
-  assertEqual(bigPlane8.project(biga8), biga8);
-  
+  assertEquals(plane.complex().project(plane.complex(3, 4)), plane.complex(3, 4));
+  assertEquals(bigPlane5.complex().project(bigPlane5.complex(3, 4)), bigPlane5.complex(3, 4));
+  assertEquals(bigPlane8.complex().project(bigPlane8.complex(3, 4)), bigPlane8.complex(3, 4));
+
   logger.success("testComplexProject".padEnd(20) + ": success");
 }
 
+function testScalars() {
+  const plane = COMPLEX_PLANE;
+  const bigPlane5 = new BigComplexPlane(5);
+
+  const x = plane.scalar(3);
+  const bigx5 = bigPlane5.scalar(3);
+
+  assertEqual(bigPlane5.scalar(x), bigx5);
+  assertEqual(plane.scalar(x), x);
+
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(-1024)), NaN);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(-1)), NaN);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(0)), NaN);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(1)), 0);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(2)), 1);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(1024)), 10);
+  assertEqual(bigPlane5.log2(bigPlane5.scalar(1000)), 9);
+
+  logger.success("testScalars".padEnd(20) + ": success");
+}
+
 function assertEqual(expected, actual) {
-  console.assert(expected === actual, expected + " !== " + actual);
+  console.assert(
+    (Number.isNaN(expected) && Number.isNaN(actual)) || expected === actual,
+    expected + " !== " + actual
+  );
 }
 
 function assertEquals(expected, actual) {

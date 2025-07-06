@@ -1,3 +1,5 @@
+const DEBUG_MODE = false;
+
 export class Complex {
   constructor(x, y) {
     this.x = x ?? 0;
@@ -32,13 +34,14 @@ export class Complex {
     return this;
   }
 
+  // z = (x / a, y / (b ?? a))
   divScalar(a, b) {
     this.x /= a;
     this.y /= b ?? a;
     return this;
   }
 
-  // z = |z|²
+  // z = z²
   square() {
     const x = this.x * this.x - this.y * this.y;
     this.y = 2 * this.x * this.y;
@@ -53,29 +56,82 @@ export class Complex {
 
   // z == a
   equals(a) {
-    return a instanceof Complex && this.x === a.x && this.y === a.y;
+    return (a instanceof Complex || a instanceof ConstComplex) && this.x === a.x && this.y === a.y;
   }
 
   toString() {
     return `Complex(${this.x}, ${this.y})`;
   }
+
+  project(a) {
+    const sourcePlane = a.plane ?? COMPLEX_PLANE;
+    if (!sourcePlane.isBigComplex()) {
+      this.x = a.x;
+      this.y = a.y;
+    } else {
+      this.x = sourcePlane.asNumber(a.x);
+      this.y = sourcePlane.asNumber(a.y);
+    }
+    return this;
+  }
+
+  clone() {
+    return new Complex(this.x, this.y);
+  }
+
+  const() {
+    return DEBUG_MODE ? new ConstComplex(this.x, this.y) : this;
+  }
 }
 
-export class ComplexPlane {
+class ConstComplex {
+  constructor(x, y) {
+    this.x = x ?? 0;
+    this.y = y ?? 0;
+  }
+
+  clone() {
+    return new Complex(this.x, this.y);
+  }
+
+  const() {
+    return this;
+  }
+}
+
+class ComplexPlane {
   complex(x, y) {
     return new Complex(x, y);
   }
 
-  project(a) {
-    if (a instanceof Complex) {
-      return a;
-    } else if (a instanceof BigComplex) {
-      return new Complex(a.plane.asNumber(a.x), a.plane.asNumber(a.y));
-    } else {
-      throw new TypeError("Unexpected complex type");
+  constComplex(x, y) {
+    return new ConstComplex(x, y);
+  }
+
+  scalar(x) {
+    if (DEBUG_MODE && typeof x !== "number") {
+      throw new TypeError("Unexpected scalar type " + typeof x);
     }
+    return x;
+  }
+
+  log2(x) {
+    return Math.log(x) / Math.LN2;
+  }
+
+  asNumber(x) {
+    if (DEBUG_MODE && typeof x !== "number") {
+      throw new TypeError("Unexpected type " + typeof x);
+    }
+    return x;
+  }
+
+  isBigComplex() {
+    return false;
   }
 }
+
+export const COMPLEX_PLANE = new ComplexPlane();
 
 // Represents the implicit unit of the mantissa.
 const MANTISSA_UNIT = 1n << 52n;
@@ -113,6 +169,9 @@ export class BigComplexPlane {
    * @return {BigInt}
    */
   asBigInt(x) {
+    if (typeof x === "bigint" || x === undefined || x === null) {
+      return x;
+    }
     const {
       sign: x_sign,
       exponent: x_exponent,
@@ -142,29 +201,35 @@ export class BigComplexPlane {
     return Number(x) * Math.pow(2, -Number(this.exponent));
   }
 
-  project(a) {
-    if (a instanceof Complex) {
-      return this.complex(a.x, a.y);
-    } else if (a instanceof BigComplex) {
-      const exponentDelta = this.exponent - a.plane.exponent;
-      if (exponentDelta === 0n) {
-        return a;
-      } else if (exponentDelta > 0n) {
-        return new BigComplex(this, a.x << exponentDelta, a.y << exponentDelta);
-      } else {
-        return new BigComplex(
-          this,
-          a.x >> -exponentDelta,
-          a.y >> -exponentDelta
-        );
-      }
-    } else {
-      throw new TypeError("Unexpected complex type");
+  scalar(x) {
+    if (DEBUG_MODE && typeof x !== "number") {
+      throw new TypeError("Unexpected scalar type " + typeof x);
     }
+    return this.asBigInt(x);
   }
 
   complex(x, y) {
     return new BigComplex(this, this.asBigInt(x), this.asBigInt(y));
+  }
+
+  constComplex(x, y) {
+    return new ConstBigComplex(this, this.asBigInt(x), this.asBigInt(y));
+  }
+
+  log2(x) {
+    if (x <= 0n) {
+      return NaN;
+    }
+    let log = 0;
+    while (x > 1n) {
+      x >>= 1n;
+      log++;
+    }
+    return log - Number(this.exponent);
+  }
+
+  isBigComplex() {
+    return true;
   }
 }
 
@@ -176,13 +241,17 @@ export class BigComplex {
   }
 
   assertSameExponent(a) {
-    if (this.plane !== a.plane && this.plane.exponent !== a.plane.exponent) {
-      throw new Error(
-        "Mismatch BigComplex exponent: " +
-          this.plane.exponent +
-          " != " +
-          a.plane.exponent
-      );
+    if (DEBUG_MODE) {
+      if (!(a instanceof BigComplex) && !(a instanceof ConstBigComplex)) {
+        throw TypeError(
+          `Unexpected type: ${a?.constructor?.name ?? typeof obj} != BigComplex`
+        );
+      }
+      if (this.plane.exponent !== a.plane.exponent) {
+        throw new Error(
+          `Mismatch BigComplex exponent: ${this.plane.exponent} != ${a.plane.exponent}`
+        );
+      }
     }
   }
 
@@ -208,7 +277,31 @@ export class BigComplex {
     return this;
   }
 
-  // z = |z|²
+  // z = z - a
+  sub(a) {
+    this.assertSameExponent(a);
+    this.x -= a.x;
+    this.y -= a.y;
+    return this;
+  }
+
+  mulScalar(x, y) {
+    x = this.plane.asBigInt(x);
+    y = this.plane.asBigInt(y);
+    this.x = (this.x * x) >> this.plane.exponent;
+    this.y = (this.y * (y ?? x)) >> this.plane.exponent;
+    return this;
+  }
+
+  divScalar(x, y) {
+    x = this.plane.asBigInt(x);
+    y = this.plane.asBigInt(y);
+    this.x = (this.x << this.plane.exponent) / x;
+    this.y = (this.y << this.plane.exponent) / (y ?? x);
+    return this;
+  }
+
+  // z = z²
   square() {
     const x = (this.x * this.x - this.y * this.y) >> this.plane.exponent;
     this.y = (this.x * this.y) >> (this.plane.exponent - 1n);
@@ -223,7 +316,7 @@ export class BigComplex {
 
   equals(a) {
     return (
-      a instanceof BigComplex &&
+      (a instanceof BigComplex || a instanceof ConstBigComplex) &&
       this.plane.exponent === a.plane.exponent &&
       this.x === a.x &&
       this.y === a.y
@@ -232,5 +325,50 @@ export class BigComplex {
 
   toString() {
     return `BigComplex(exponent=${this.plane.exponent}, x=${this.x}, y=${this.y})`;
+  }
+
+  project(a) {
+    const sourcePlane = a.plane ?? COMPLEX_PLANE;
+    if (!sourcePlane.isBigComplex()) {
+      this.x = this.plane.asBigInt(a.x);
+      this.y = this.plane.asBigInt(a.y);
+    } else {
+      const exponentDelta = this.plane.exponent - a.plane.exponent;
+      if (exponentDelta === 0n) {
+        this.x = a.x;
+        this.y = a.y;
+      } else if (exponentDelta > 0n) {
+        this.x = a.x << exponentDelta;
+        this.y = a.y << exponentDelta;
+      } else {
+        this.x = a.x >> -exponentDelta;
+        this.y = a.y >> -exponentDelta;
+      }
+    }
+    return this;
+  }
+
+  clone() {
+    return new BigComplex(this.plane, this.x, this.y);
+  }
+
+  const() {
+    return DEBUG_MODE ? new ConstBigComplex(this.plane, this.x, this.y) : this;
+  }
+}
+
+class ConstBigComplex {
+  constructor(plane, x, y) {
+    this.plane = plane;
+    this.x = x;
+    this.y = y;
+  }
+
+  clone() {
+    return new BigComplex(this.plane, this.x, this.y);
+  }
+
+  const() {
+    return this;
   }
 }

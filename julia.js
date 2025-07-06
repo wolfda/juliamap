@@ -1,4 +1,4 @@
-import { BigComplexPlane, Complex } from "./complex.js";
+import { Complex, COMPLEX_PLANE } from "./complex.js";
 
 export const FN_MANDELBROT = 0;
 export const FN_JULIA = 1;
@@ -11,26 +11,28 @@ export class Fn {
   }
 
   static julia(c) {
-    return new Fn(FN_JULIA, new Complex(c.x, c.y));
+    return new Fn(FN_JULIA, c);
   }
 }
 
 export const DEFAULT_FN = new Fn(FN_MANDELBROT);
 
-function smoothEscapeVelocity(iter, squareMod) {
-  return iter + 1 - Math.log(Math.log(squareMod)) / Math.log(2);
+function smoothEscapeVelocity(plane, iter, squareMod) {
+  return iter + 1 - Math.log(plane.log2(squareMod) * Math.LN2) / Math.LN2;
 }
 
 export function julia(z0, c, maxIter) {
-  let z = new Complex(z0.x, z0.y);
+  let z = z0.clone();
+  const plane = z0.plane ?? COMPLEX_PLANE;
+  const bailout2 = plane.scalar(BAILOUT * BAILOUT);
   for (let i = 0; i < maxIter; i++) {
     // z = z² + c, where z² is computed using complex multiplication.
     z.square().add(c);
 
     // If the magnitude exceeds 2.0 (|z|² > 4), the point escapes.
     const squareMod = z.squareMod();
-    if (squareMod > BAILOUT * BAILOUT) {
-      return smoothEscapeVelocity(i, squareMod);
+    if (squareMod > bailout2) {
+      return smoothEscapeVelocity(plane, i, squareMod);
     }
   }
 
@@ -44,29 +46,27 @@ export function julia(z0, c, maxIter) {
 export function juliaSeries(z0, c, count) {
   const points = new Float32Array(2 * count);
 
-  let z = new Complex(z0.x, z0.y);
-  for (let i = 0; i < count; i++) {
-    points[2 * i] = z.x;
-    points[2 * i + 1] = z.y;
+  let z = z0.clone();
+  let zp = COMPLEX_PLANE.complex();
+  let i;
+  for (i = 0; i < count; i++) {
+    zp.project(z);
+    points[2 * i] = zp.x;
+    points[2 * i + 1] = zp.y;
 
     // z = z² + c
     z.square().add(c);
-  }
-  return points;
-}
 
-export function juliaBigComplex(z, c, maxIter) {
-  const bigFour = z.plane.asBigInt(4);
-  for (let i = 0; i < maxIter; i++) {
-    z.square().add(c);
-
-    // If the magnitude of z exceeds 2.0 (|z|² > 4), the point escapes.
-    if (z.squareMod() > bigFour) {
-      return i;
+    if (zp.squareMod() > BAILOUT * BAILOUT) {
+      break;
     }
   }
-
-  return maxIter;
+  // After we bail out, fill in the remaining points with NaN.
+  for (i++; i < count; i++) {
+    points[2 * i] = NaN;
+    points[2 * i + 1] = NaN;
+  }
+  return points;
 }
 
 /**
@@ -80,16 +80,18 @@ export class Orbit {
       height,
       maxIter,
       function (pos, maxIter) {
-        return julia(new Complex(0, 0), pos, maxIter);
+        return julia(map.plane.complex(0, 0), pos, maxIter);
       },
       function (pos, maxIter) {
-        return juliaSeries(new Complex(0, 0), pos, maxIter);
+        return juliaSeries(map.plane.complex(0, 0), pos, maxIter);
       },
       maxSamples
     );
   }
 
   static searchForJulia(map, width, height, maxIter, c, maxSamples = 200) {
+    const plane = map.plane ?? COMPLEX_PLANE;
+    c = plane.complex().project(c);
     return Orbit.searchOrbit(
       map,
       width,

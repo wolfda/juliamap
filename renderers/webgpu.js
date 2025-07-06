@@ -1,3 +1,4 @@
+import { COMPLEX_PLANE } from "../complex.js";
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../julia.js";
 import { getPaletteId } from "../palette.js";
 import { hasWebgpu } from "./capabilities.js";
@@ -147,14 +148,14 @@ export class WebgpuRenderer extends Renderer {
     if (options.deep) {
       switch (options.fn.id) {
         case FN_MANDELBROT:
-          orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
+          orbit = Orbit.searchForMandelbrot(map, w, h, maxIter);
           break;
         case FN_JULIA:
           orbit = Orbit.searchForJulia(
             map,
             w,
             h,
-            options.maxIter,
+            maxIter,
             options.fn.param0
           );
           break;
@@ -164,18 +165,20 @@ export class WebgpuRenderer extends Renderer {
 
     const uniformArray = new ArrayBuffer(48);
     const dataView = new DataView(uniformArray);
+    const mapCenter = COMPLEX_PLANE.complex().project(map.center);
+    const fnParam0 = COMPLEX_PLANE.complex().project(options.fn.param0);
     dataView.setUint32(0, options.deep ? 1 : 0, true); // usePerturbation
     dataView.setFloat32(4, map.zoom, true); // zoom
-    dataView.setFloat32(8, orbit ? orbit.sx : map.center.x, true); // center
-    dataView.setFloat32(12, orbit ? orbit.sy : map.center.y, true); // center
+    dataView.setFloat32(8, orbit ? orbit.sx : mapCenter.x, true); // center
+    dataView.setFloat32(12, orbit ? orbit.sy : mapCenter.y, true); // center
     dataView.setFloat32(16, w, true); // resolution
     dataView.setFloat32(20, h, true); // resolution
-    dataView.setUint32(24, options.maxIter, true); // maxIter
+    dataView.setUint32(24, maxIter, true); // maxIter
     dataView.setUint32(28, samples, true); // samples
     dataView.setUint32(32, getPaletteId(options.palette), true); // paletteId
     dataView.setUint32(36, options.fn.id, true); // functionId
-    dataView.setFloat32(40, options.fn.param0.x, true); // param0
-    dataView.setFloat32(44, options.fn.param0.y, true); // param0
+    dataView.setFloat32(40, fnParam0.x, true); // param0
+    dataView.setFloat32(44, fnParam0.y, true); // param0
 
     this.gpuDevice.queue.writeBuffer(this.gpuUniformBuffer, 0, uniformArray);
 

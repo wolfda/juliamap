@@ -1,3 +1,4 @@
+import { COMPLEX_PLANE } from "../complex.js";
 import { FN_JULIA, FN_MANDELBROT, Orbit } from "../julia.js"; // added for deep zoom perturbation
 import { getPaletteId } from "../palette.js";
 import { hasWebgl1 } from "./capabilities.js";
@@ -205,7 +206,8 @@ export class Webgl1Renderer extends Renderer {
       );
       gl.uniform1i(uOrbitCountLocation, orbitCount);
     } else {
-      gl.uniform3f(this.uCenterZoom, map.center.x, map.center.y, map.zoom);
+      const center = COMPLEX_PLANE.complex().project(map.center);
+      gl.uniform3f(this.uCenterZoom, center.x, center.y, map.zoom);
     }
 
     // Clear and draw.

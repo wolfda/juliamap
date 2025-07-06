@@ -32,7 +32,7 @@ export class CpuRenderer extends Renderer {
 
   async render(map, options) {
     const request = {
-      center: { x: map.center.x, y: map.center.y },
+      center: map.center.clone(),
       zoom: map.zoom,
       options,
     };
@@ -84,6 +84,7 @@ export class CpuRenderer extends Renderer {
           width: w,
           height: h,
           center,
+          centerExponent: center.plane?.exponent,
           zoom,
           startY,
           endY,
@@ -91,9 +92,12 @@ export class CpuRenderer extends Renderer {
           paletteId: getPaletteId(options.palette),
           functionId: options.fn.id,
           param0: options.fn.param0,
+          param0Exponent: options.fn.param0.plane?.exponent,
         };
 
-        const worker = new Worker("/renderers/cpu-worker.js", { type: "module" });
+        const worker = new Worker("/renderers/cpu-worker.js", {
+          type: "module",
+        });
         this.currentWorkers.push(worker);
 
         worker.onmessage = (e) => {

@@ -12,7 +12,7 @@
 // main.js must convert from mouse/touch/wheel to fractal deltas.
 // --------------------------------------
 
-import { Complex } from "./complex.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "./complex.js";
 
 // Velocities
 const MIN_VELOCITY = 1e-3;
@@ -20,16 +20,18 @@ const MIN_VELOCITY = 1e-3;
 // Internal friction factors
 const PAN_FRICTION = 0.94;
 const ZOOM_FRICTION = 0.95;
-const ZERO = new Complex(0, 0);
+
+const NATIVE_COMPLEX_PRECISION = 40;
 
 // Maximum allowed zoom level. Rendering becomes unstable past this point.
-export const MAX_ZOOM = 40;
+export const MAX_ZOOM = 120;
 
 export class MapControl {
   constructor() {
-    this.center = new Complex(0, 0);
+    this.plane = COMPLEX_PLANE;
+    this.center = this.plane.complex(0, 0);
     this.zoom = 0;
-    this.velocity = new Complex(0, 0); // Pan velocity
+    this.velocity = this.plane.complex(0, 0); // Pan velocity
     this.vz = 0; // "zoom velocity" for zoom inertia
 
     // We'll keep a single timestamp to measure time deltas
@@ -45,7 +47,7 @@ export class MapControl {
    * e.g. after reading from the URL.
    */
   moveTo(center, zoom) {
-    this.center.set(center);
+    this.center.project(center);
     this.zoom = Math.min(Math.max(zoom, 0), MAX_ZOOM);
   }
 
@@ -55,7 +57,7 @@ export class MapControl {
    * after, e.g., a wheel zoom.
    */
   stop() {
-    this.velocity.set(ZERO);
+    this.velocity.set(this.plane.complex(0, 0));
     this.vz = 0;
     if (this.inertiaRequestId) {
       cancelAnimationFrame(this.inertiaRequestId);
@@ -66,10 +68,13 @@ export class MapControl {
    * Convert screen coords to complex plane coords.
    */
   screenToComplex(sx, sy, width, height) {
+    const c = this.plane.complex(0, 0).set(this.center);
     const scale = (4 / width) * Math.pow(2, -this.zoom);
-    const cx = this.center.x + (sx - width * 0.5) * scale;
-    const cy = this.center.y - (sy - height * 0.5) * scale;
-    return new Complex(cx, cy);
+    const delta = this.plane.complex(
+      (sx - width * 0.5) * scale,
+      -(sy - height * 0.5) * scale
+    );
+    return c.add(delta);
   }
 
   /**
@@ -135,6 +140,25 @@ export class MapControl {
     this.zoomBy(newZoom - this.zoom);
   }
 
+  maybeReproject() {
+    const targetExponent =
+      this.zoom <= NATIVE_COMPLEX_PRECISION
+        ? undefined
+        : 11 + Math.ceil(this.zoom);
+    if (Number(this.plane.exponent) === targetExponent) {
+      return;
+    }
+
+    this.plane =
+      targetExponent === undefined
+        ? COMPLEX_PLANE
+        : new BigComplexPlane(targetExponent);
+    const center = this.plane.complex().project(this.center);
+    const velocity = this.plane.complex().project(this.velocity);
+    this.center = center;
+    this.velocity = velocity;
+  }
+
   /**
    * The main inertia loop.
    * Call this, for example, on mouseup or touchend if you want to
@@ -150,16 +174,17 @@ export class MapControl {
     }
 
     // If speeds are negligible, do nothing
-    const speedSq = this.velocity.squareMod() + this.vz * this.vz;
+    const speedSq =
+      this.plane.asNumber(this.velocity.squareMod()) + this.vz * this.vz;
     if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
-      this.velocity.set(ZERO);
+      this.velocity.set(this.plane.complex(0, 0));
       this.vz = 0;
       return;
     }
 
     // If zoom is animating, cancel panning
     if (this.vz > MIN_VELOCITY) {
-      this.velocity.set(ZERO);
+      this.velocity.set(this.plane.complex(0, 0));
     }
 
     // We'll track time for each animation frame separately
@@ -171,8 +196,8 @@ export class MapControl {
       lastFrameTime = now;
 
       // Pan with friction
-      this.center.x += this.velocity.x * dt;
-      this.center.y += this.velocity.y * dt;
+      const dv = this.plane.complex(0, 0).set(this.velocity).mulScalar(dt);
+      this.center.add(dv);
       this.velocity.mulScalar(PAN_FRICTION);
 
       // Zoom with friction (zoom velocity)
@@ -193,9 +218,10 @@ export class MapControl {
       onMapChange?.();
 
       // Check velocity
-      const speedSq = this.velocity.squareMod() + this.vz * this.vz;
+      const speedSq =
+        this.plane.asNumber(this.velocity.squareMod()) + this.vz * this.vz;
       if (speedSq < MIN_VELOCITY * MIN_VELOCITY) {
-        this.velocity.set(ZERO);
+        this.velocity.set(this.plane.complex(0, 0));
         this.vz = 0;
         this.inertiaRequestId = null;
         return;
@@ -207,4 +233,3 @@ export class MapControl {
     this.inertiaRequestId = requestAnimationFrame(tick.bind(this));
   }
 }
-

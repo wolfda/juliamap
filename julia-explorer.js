@@ -1,3 +1,4 @@
+import { Complex } from "./complex.js";
 import { FractalExplorer } from "./fractal-explorer.js";
 import { DEFAULT_FN, Fn } from "./julia.js";
 
@@ -27,7 +28,7 @@ export class JuliaExplorer {
     const juliaExplorer = await FractalExplorer.create({
       divContainer: juliaDiv,
       renderingEngine,
-      options: { ...options, fn: Fn.julia(0, 0) },
+      options: { ...options, fn: Fn.julia(new Complex(0, 0)) },
       onMapChanged: onChanged,
       onRendered,
     });

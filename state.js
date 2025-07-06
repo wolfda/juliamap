@@ -1,4 +1,4 @@
-import { Complex } from "./complex.js";
+import { Complex, COMPLEX_PLANE } from "./complex.js";
 import { Layout } from "./julia-explorer.js";
 import { Palette } from "./palette.js";
 
@@ -229,9 +229,10 @@ function parseXYZ(xyz, def) {
 
 function renderXYZ(center, zoom) {
   const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
+  const c = COMPLEX_PLANE.complex().project(center);
   return [
-    truncatePrecision(center.x ?? 0, precision),
-    truncatePrecision(center.y ?? 0, precision),
+    truncatePrecision(c.x ?? 0, precision),
+    truncatePrecision(c.y ?? 0, precision),
     truncatePrecision(zoom ?? 0, 2),
   ].join("_");
 }

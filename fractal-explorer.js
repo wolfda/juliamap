@@ -152,6 +152,7 @@ export class FractalExplorer {
 
     // Shift the center to keep pivot static
     this.map.move(pivot.sub(newPivot));
+    this.map.maybeReproject();
 
     this.render();
     this.onMapChanged?.();
