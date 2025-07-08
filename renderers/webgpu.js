@@ -40,15 +40,21 @@ export class WebgpuRenderer extends Renderer {
     // 1. Create a hidden offscreen canvas + context
     // ----------------------------------------------
     this.offscreenCanvas = document.createElement("canvas");
+    this.offscreenCanvas.width = this.canvas.width;
+    this.offscreenCanvas.height = this.canvas.height;
     this.offscreenCanvas.style.display = "none";
     document.body.appendChild(this.offscreenCanvas);
 
     this.offscreenGpuContext = this.offscreenCanvas.getContext("webgpu");
 
-    // Choose a preferred canvas format
     const format = navigator.gpu.getPreferredCanvasFormat();
 
-    // Create our render pipeline
+    this.offscreenGpuContext.configure({
+      device: this.gpuDevice,
+      format: format,
+      alphaMode: "premultiplied",
+    });
+
     this.gpuPipeline = this.gpuDevice.createRenderPipeline({
       layout: "auto",
       vertex: {
@@ -108,6 +114,11 @@ export class WebgpuRenderer extends Renderer {
     });
   }
 
+  resize(width, height) {
+    this.offscreenCanvas.width = width;
+    this.offscreenCanvas.height = height;
+  }
+
   async #createShaderModule(code) {
     const shaderModule = this.gpuDevice.createShaderModule({ code });
     const compilationInfo = await shaderModule.getCompilationInfo();
@@ -131,16 +142,6 @@ export class WebgpuRenderer extends Renderer {
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
 
-    this.offscreenCanvas.width = w;
-    this.offscreenCanvas.height = h;
-
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    this.offscreenGpuContext.configure({
-      device: this.gpuDevice,
-      format: format,
-      alphaMode: "premultiplied",
-    });
-
     // ------------------------------------
     // 3. Write fractal parameters to GPU
     // ------------------------------------
@@ -151,13 +152,7 @@ export class WebgpuRenderer extends Renderer {
           orbit = Orbit.searchForMandelbrot(map, w, h, maxIter);
           break;
         case FN_JULIA:
-          orbit = Orbit.searchForJulia(
-            map,
-            w,
-            h,
-            maxIter,
-            options.fn.param0
-          );
+          orbit = Orbit.searchForJulia(map, w, h, maxIter, options.fn.param0);
           break;
       }
     }
@@ -212,7 +207,9 @@ export class WebgpuRenderer extends Renderer {
 
     passEncoder.setPipeline(this.gpuPipeline);
     passEncoder.setBindGroup(0, this.gpuBindGroup);
-    passEncoder.draw(4, 1, 0, 0); // 4 verts => full-screen quad
+    passEncoder.setViewport(0, 0, w, h, 0, 1);
+    passEncoder.setScissorRect(0, 0, w, h);
+    passEncoder.draw(4, 1, 0, 0);
     passEncoder.end();
 
     const gpuCommands = commandEncoder.finish();

@@ -38,8 +38,8 @@ export class Webgl2Renderer extends Renderer {
     }
     // Create a hidden offscreen canvas for rendering.
     const webGLCanvas = document.createElement("canvas");
-    webGLCanvas.width = 256;
-    webGLCanvas.height = 256;
+    webGLCanvas.width = this.canvas.width;
+    webGLCanvas.height = this.canvas.height;
     webGLCanvas.style.display = "none";
     document.body.appendChild(webGLCanvas);
 
@@ -124,6 +124,12 @@ void main() {
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.orbitBuffer);
   }
 
+  resize(width, height) {
+    const canvas = this.gl.canvas;
+    canvas.width = width;
+    canvas.height = height;
+  }
+
   detach() {
     document.removeChild(this.webGLCanvas);
   }
@@ -135,8 +141,6 @@ void main() {
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
 
-    offscreenCanvas.width = w;
-    offscreenCanvas.height = h;
     gl.viewport(0, 0, w, h);
 
     // Set uniforms.

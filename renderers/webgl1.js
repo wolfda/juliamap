@@ -37,8 +37,8 @@ export class Webgl1Renderer extends Renderer {
     }
 
     const webGLCanvas = document.createElement("canvas");
-    webGLCanvas.width = 256;
-    webGLCanvas.height = 256;
+    webGLCanvas.width = this.canvas.width;
+    webGLCanvas.height = this.canvas.height;
     webGLCanvas.style.display = "none";
     document.body.appendChild(webGLCanvas);
 
@@ -111,6 +111,12 @@ export class Webgl1Renderer extends Renderer {
     return true;
   }
 
+  resize(width, height) {
+    const canvas = this.gl.canvas;
+    canvas.width = width;
+    canvas.height = height;
+  }
+
   detach() {
     document.removeChild(this.webGLCanvas);
   }
@@ -119,12 +125,9 @@ export class Webgl1Renderer extends Renderer {
     const gl = this.gl;
 
     const scale = Math.min(options.pixelDensity, 1);
-    const offscreenCanvas = gl.canvas;
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
 
-    offscreenCanvas.width = w;
-    offscreenCanvas.height = h;
     gl.viewport(0, 0, w, h);
 
     // Set uniforms.
@@ -218,7 +221,7 @@ export class Webgl1Renderer extends Renderer {
     // Blit to main canvas.
     this.ctx.save();
     this.ctx.scale(1 / scale, 1 / scale);
-    this.ctx.drawImage(offscreenCanvas, 0, 0);
+    this.ctx.drawImage(gl.canvas, 0, 0);
     this.ctx.restore();
 
     return new RenderResults(this.id(), options);

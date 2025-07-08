@@ -13,26 +13,6 @@ const MIN_PIXEL_DENSITY = 0.125;
 const MAX_PIXEL_DENSITY = 1;
 
 export class FractalExplorer {
-  static async create({
-    divContainer,
-    renderingEngine,
-    options,
-    onMapChanged,
-    onDragged,
-    onRendered,
-  } = {}) {
-    const explorer = new FractalExplorer(
-      divContainer,
-      renderingEngine,
-      options,
-      onMapChanged,
-      onDragged,
-      onRendered
-    );
-    await explorer.#initRenderer();
-    return explorer;
-  }
-
   constructor(
     divContainer,
     renderingEngine,
@@ -75,11 +55,14 @@ export class FractalExplorer {
     this.onTouchCancelHandler = this.#onTouchCancel.bind(this);
 
     this.fpsMonitor = new FpsMonitor(FPS_WINDOW_MS);
-  }
 
-  async #initRenderer() {
+    this.isAttached = false;
+
     this.canvas = document.createElement("canvas");
     this.ctx = this.canvas.getContext("2d");
+  }
+
+  async initRenderer() {
     this.renderer = await createRenderer(
       this.canvas,
       this.ctx,
@@ -275,11 +258,20 @@ export class FractalExplorer {
   }
 
   attach() {
+    if (this.isAttached) {
+      return;
+    }
     this.divContainer.appendChild(this.canvas);
+    this.render();
+    this.isAttached = true;
   }
 
   detach() {
+    if (!this.isAttached) {
+      return;
+    }
     this.divContainer.removeChild(this.canvas);
+    this.isAttached = false;
   }
 
   setInteractive(interactive) {
@@ -307,7 +299,10 @@ export class FractalExplorer {
   async resize(width, height) {
     this.canvas.width = width * DPR;
     this.canvas.height = height * DPR;
-    await this.render();
+    if (this.renderer) {
+      this.renderer.resize(width * DPR, height * DPR);
+      await this.render();
+    }
   }
 
   #getDefaultIter() {
@@ -318,6 +313,9 @@ export class FractalExplorer {
    * Render a quick preview, then schedule a final CPU render.
    */
   async render() {
+    if (!this.isAttached) {
+      return;
+    }
     const pixelDensity = this.options.pixelDensity ?? this.dynamicPixelDensity;
     const restPixelDensity =
       this.options.pixelDensity ??

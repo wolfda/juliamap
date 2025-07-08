@@ -12,28 +12,35 @@ export class JuliaExplorer {
   static async create({
     renderingEngine,
     options,
+    layout,
     onChanged,
     onRendered,
   } = {}) {
     const mandelbrotDiv = document.getElementById("mandelbrot");
-    const mandelExplorer = await FractalExplorer.create({
-      divContainer: mandelbrotDiv,
+    const mandelExplorer = new FractalExplorer(
+      mandelbrotDiv,
       renderingEngine,
-      options: { ...options, fn: DEFAULT_FN },
-      onMapChanged: onChanged,
-      onRendered,
-    });
+      { ...options, fn: DEFAULT_FN },
+      onChanged,
+      null,
+      onRendered
+    );
 
     const juliaDiv = document.getElementById("julia");
-    const juliaExplorer = await FractalExplorer.create({
-      divContainer: juliaDiv,
+    const juliaExplorer = new FractalExplorer(
+      juliaDiv,
       renderingEngine,
-      options: { ...options, fn: Fn.julia(new Complex(0, 0)) },
-      onMapChanged: onChanged,
-      onRendered,
-    });
+      { ...options, fn: Fn.julia(new Complex(0, 0)) },
+      onChanged,
+      null,
+      onRendered
+    );
 
-    return await new JuliaExplorer(mandelExplorer, juliaExplorer, onChanged).#init();
+    return await new JuliaExplorer(
+      mandelExplorer,
+      juliaExplorer,
+      onChanged
+    ).#init(layout);
   }
 
   constructor(mandelExplorer, juliaExplorer, onChanged) {
@@ -45,8 +52,10 @@ export class JuliaExplorer {
     this.onClickHandler = this.#onClick.bind(this);
   }
 
-  async #init() {
-    await this.setLayout(Layout.SPLIT);
+  async #init(layout) {
+    await this.setLayout(layout);
+    await this.mandelExplorer.initRenderer();
+    await this.juliaExplorer.initRenderer();
     this.attach();
     return this;
   }
@@ -75,14 +84,23 @@ export class JuliaExplorer {
 
   async setLayout(layout) {
     this.layout = layout;
-    this.mandelExplorer.divContainer.removeEventListener("click", this.onClickHandler);
-    this.juliaExplorer.divContainer.removeEventListener("click", this.onClickHandler);
+    this.mandelExplorer.divContainer.removeEventListener(
+      "click",
+      this.onClickHandler
+    );
+    this.juliaExplorer.divContainer.removeEventListener(
+      "click",
+      this.onClickHandler
+    );
     switch (layout) {
       case Layout.MANDEL:
         this.mandelExplorer.divContainer.className = "fullscreen";
         this.mandelExplorer.setInteractive(true);
         this.juliaExplorer.divContainer.className = "minimized";
-        this.juliaExplorer.divContainer.addEventListener("click", this.onClickHandler);
+        this.juliaExplorer.divContainer.addEventListener(
+          "click",
+          this.onClickHandler
+        );
         this.juliaExplorer.setInteractive(false);
         break;
 
@@ -91,7 +109,10 @@ export class JuliaExplorer {
         this.mandelExplorer.setInteractive(false);
         this.juliaExplorer.divContainer.className = "fullscreen";
         this.juliaExplorer.setInteractive(true);
-        this.mandelExplorer.divContainer.addEventListener("click", this.onClickHandler);
+        this.mandelExplorer.divContainer.addEventListener(
+          "click",
+          this.onClickHandler
+        );
         break;
 
       case Layout.SPLIT:
@@ -104,7 +125,6 @@ export class JuliaExplorer {
   }
 
   async resize(width, height) {
-    // equivalent to css 20vmin
     const minimizedSize = 0.2 * Math.min(width, height);
     switch (this.layout) {
       case Layout.SPLIT:

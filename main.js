@@ -30,6 +30,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       deep: appState.deep,
       pixelDensity: appState.pixelDensity,
     }),
+    layout: appState.layout ?? Layout.MANDEL,
     onChanged: onViewportChanged,
     onRendered: updateStats,
   });

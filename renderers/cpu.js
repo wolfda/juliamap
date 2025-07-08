@@ -16,6 +16,8 @@ export class CpuRenderer extends Renderer {
     this.pendingRequest = null;
     this.cpuCount = getCpuCount();
     this.offscreenCanvas = document.createElement("canvas");
+    this.offscreenCanvas.width = canvas.width;
+    this.offscreenCanvas.height = canvas.height;
     this.offscreenCtx = this.offscreenCanvas.getContext("2d");
   }
 
@@ -63,9 +65,6 @@ export class CpuRenderer extends Renderer {
     const scale = Math.min(options.pixelDensity, 1);
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
-
-    this.offscreenCanvas.width = w;
-    this.offscreenCanvas.height = h;
 
     const finalImageData = this.offscreenCtx.createImageData(w, h);
     let finishedWorkers = 0;
@@ -140,5 +139,10 @@ export class CpuRenderer extends Renderer {
         worker.postMessage(workerData);
       }
     });
+  }
+
+  resize(width, height) {
+    this.offscreenCanvas.width = width;
+    this.offscreenCanvas.height = height;
   }
 }
