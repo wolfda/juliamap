@@ -124,7 +124,8 @@ export class Webgl1Renderer extends Renderer {
   render(map, options) {
     const gl = this.gl;
 
-    const scale = Math.min(options.pixelDensity, 1);
+    // const scale = Math.min(options.pixelDensity, 1);
+    const scale = 0.5;
     const w = Math.floor(this.canvas.width * scale);
     const h = Math.floor(this.canvas.height * scale);
 
@@ -218,11 +219,18 @@ export class Webgl1Renderer extends Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // Blit to main canvas.
-    this.ctx.save();
-    this.ctx.scale(1 / scale, 1 / scale);
-    this.ctx.drawImage(gl.canvas, 0, 0);
-    this.ctx.restore();
+    // Copy the bottom left corner
+    this.ctx.drawImage(
+      gl.canvas,
+      0,
+      this.canvas.height - h,
+      w,
+      h,
+      0,
+      0,
+      this.canvas.width,
+      this.canvas.height
+    );
 
     return new RenderResults(this.id(), options);
   }
