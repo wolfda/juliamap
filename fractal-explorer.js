@@ -7,8 +7,8 @@ import { createRenderer } from "./renderers/renderers.js";
 
 const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
-const FPS_WINDOW_MS = 1000;
-const TARGET_FRAME_MS = 1000 / 30; // 30fps target
+const FPS_WINDOW_MS = 200;  // Aggregate FPS
+const TARGET_FPS = 30;
 const MIN_PIXEL_DENSITY = 0.125;
 const MAX_PIXEL_DENSITY = 1;
 
@@ -56,8 +56,6 @@ export class FractalExplorer {
 
     this.fpsMonitor = new FpsMonitor(FPS_WINDOW_MS);
 
-    this.isAttached = false;
-
     this.canvas = document.createElement("canvas");
     this.ctx = this.canvas.getContext("2d");
   }
@@ -74,6 +72,7 @@ export class FractalExplorer {
       (this.renderer.id() === RenderingEngine.CPU
         ? MIN_PIXEL_DENSITY
         : MAX_PIXEL_DENSITY);
+    setInterval(this.adjustPixelDensity.bind(this), FPS_WINDOW_MS);
   }
 
   #onMouseDown(e) {
@@ -326,28 +325,13 @@ export class FractalExplorer {
     const fn = this.options.fn ?? DEFAULT_FN;
     const options = { pixelDensity, deep, maxIter, palette, fn };
 
-    const start = performance.now();
     const renderResult = await this.renderer.render(
       this.map,
       new RenderOptions(options)
     );
-    const latency = performance.now() - start;
 
     this.onRendered?.(renderResult);
     this.fpsMonitor.addFrame();
-
-    // Adjust pixel density for next frame when auto.
-    // Only scale it down based on latency to avoid noisy oscillations.
-    if (this.options.pixelDensity == null && latency > 0 && Number.isFinite(latency)) {
-      const factor = Math.sqrt(TARGET_FRAME_MS / latency);
-      if (factor < 1) {
-        const clamped = Math.max(factor, 0.5);
-        this.dynamicPixelDensity = Math.max(
-          MIN_PIXEL_DENSITY,
-          Math.min(MAX_PIXEL_DENSITY, this.dynamicPixelDensity * clamped)
-        );
-      }
-    }
 
     clearTimeout(this.renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
@@ -359,6 +343,24 @@ export class FractalExplorer {
         this.onRendered?.(renderResult);
       }, 300);
     }
+  }
+
+  adjustPixelDensity() {
+    const fps = this.fps();
+    if (fps === null) {
+      return;
+    }
+    const error = fps - TARGET_FPS;
+    const adjustmentRate = 0.1;
+
+    // Proportional control: small error => small change
+    this.dynamicPixelDensity *= 1 + (adjustmentRate * error) / TARGET_FPS;
+
+    // Clamp to avoid crazy values
+    this.dynamicPixelDensity = Math.min(
+      Math.max(this.dynamicPixelDensity, MIN_PIXEL_DENSITY),
+      MAX_PIXEL_DENSITY
+    );
   }
 
   #canvasToComplex(sx, sy) {
@@ -457,6 +459,12 @@ class FpsMonitor {
 
   fps() {
     this.#clearFrames();
-    return Math.floor((1000 * this.frameTimes.length) / this.windowSizeMillis);
+    const actualWindowSizeMillis =
+      this.frameTimes.length === 0
+        ? 0
+        : this.frameTimes[this.frameTimes.length - 1] - this.frameTimes[0];
+    return actualWindowSizeMillis > 0.1 * this.windowSizeMillis
+      ? Math.floor((1000 * this.frameTimes.length) / actualWindowSizeMillis)
+      : null;
   }
 }
