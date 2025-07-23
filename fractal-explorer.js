@@ -7,8 +7,9 @@ import { createRenderer } from "./renderers/renderers.js";
 
 const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
-const FPS_WINDOW_MS = 200;  // Aggregate FPS
+const FPS_WINDOW_MS = 1000; // Aggregate FPS
 const TARGET_FPS = 30;
+const TARGET_DELAY = 1000 / TARGET_FPS;
 const MIN_PIXEL_DENSITY = 0.125;
 const MAX_PIXEL_DENSITY = 1;
 
@@ -325,13 +326,15 @@ export class FractalExplorer {
     const fn = this.options.fn ?? DEFAULT_FN;
     const options = { pixelDensity, deep, maxIter, palette, fn };
 
+    const start = performance.now();
     const renderResult = await this.renderer.render(
       this.map,
       new RenderOptions(options)
     );
+    const end = performance.now();
 
     this.onRendered?.(renderResult);
-    this.fpsMonitor.addFrame();
+    this.fpsMonitor.addFrame(end - start);
 
     clearTimeout(this.renderTimeoutId);
     if (pixelDensity !== restPixelDensity) {
@@ -346,15 +349,15 @@ export class FractalExplorer {
   }
 
   adjustPixelDensity() {
-    const fps = this.fps();
-    if (fps === null) {
+    const delay = this.fpsMonitor.delay();
+    if (delay === null) {
       return;
     }
-    const error = fps - TARGET_FPS;
+    const error = TARGET_DELAY - delay;
     const adjustmentRate = 0.1;
 
     // Proportional control: small error => small change
-    this.dynamicPixelDensity *= 1 + (adjustmentRate * error) / TARGET_FPS;
+    this.dynamicPixelDensity *= 1 + (adjustmentRate * error) / TARGET_DELAY;
 
     // Clamp to avoid crazy values
     this.dynamicPixelDensity = Math.min(
@@ -439,6 +442,8 @@ function easeInOutSine(t) {
 class FpsMonitor {
   constructor(windowSizeMillis) {
     this.frameTimes = [];
+    this.frameDelay = [];
+    this.totalDelay = 0;
     this.windowSizeMillis = windowSizeMillis;
   }
 
@@ -448,12 +453,16 @@ class FpsMonitor {
       this.frameTimes.length > 0 &&
       this.frameTimes[0] <= now - this.windowSizeMillis
     ) {
+      this.totalDelay -= this.frameDelay[0];
       this.frameTimes.shift();
+      this.frameDelay.shift();
     }
   }
 
-  addFrame() {
+  addFrame(delay) {
     this.frameTimes.push(performance.now());
+    this.frameDelay.push(delay);
+    this.totalDelay += delay;
     this.#clearFrames();
   }
 
@@ -465,6 +474,13 @@ class FpsMonitor {
         : this.frameTimes[this.frameTimes.length - 1] - this.frameTimes[0];
     return actualWindowSizeMillis > 0.1 * this.windowSizeMillis
       ? Math.floor((1000 * this.frameTimes.length) / actualWindowSizeMillis)
+      : null;
+  }
+
+  delay() {
+    this.#clearFrames();
+    return this.frameDelay.length > 0
+      ? this.totalDelay / this.frameDelay.length
       : null;
   }
 }
