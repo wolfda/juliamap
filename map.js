@@ -68,11 +68,13 @@ export class MapControl {
    */
   screenToComplex(sx, sy, width, height) {
     const c = this.plane.complex(0, 0).set(this.center);
-    const scale = (4 / width) * Math.pow(2, -this.zoom);
-    const delta = this.plane.complex(
-      (sx - width * 0.5) * scale,
-      -(sy - height * 0.5) * scale
-    );
+    const scale = this.plane.pow2Scalar(-this.zoom);
+    const delta = this.plane
+      .complex(
+        (sx - width * 0.5) * (4 / width),
+        -(sy - height * 0.5) * (4 / width)
+      )
+      .mulScalar(scale);
     return c.add(delta);
   }
 

@@ -116,6 +116,15 @@ class ComplexPlane {
     return x;
   }
 
+  // 2 ^ x
+  pow2Scalar(x) {
+    if (DEBUG_MODE && typeof x !== "number") {
+      throw new TypeError("Unexpected scalar type " + typeof x);
+    }
+    return 2 ** x;
+  }
+
+
   log2(x) {
     return Math.log(x) / Math.LN2;
   }
@@ -169,7 +178,7 @@ export class BigComplexPlane {
    * @param {Number} x
    * @return {BigInt}
    */
-  asBigInt(x) {
+  asBigInt(x, exponent_override) {
     if (typeof x === "bigint" || x === undefined || x === null) {
       return x;
     }
@@ -185,7 +194,8 @@ export class BigComplexPlane {
     } else if (x_exponent === 0x7ff) {
       throw new Error("Invalid float: NaN");
     }
-    const exponent = this.exponent + BigInt(x_exponent - 1023 - 52);
+    const exponent =
+      (exponent_override ?? this.exponent) + BigInt(x_exponent - 1023 - 52);
     const mantissa = MANTISSA_UNIT | x_fraction;
     const base = exponent >= 0 ? mantissa << exponent : mantissa >> -exponent;
     return x_sign ? -base : base;
@@ -207,6 +217,14 @@ export class BigComplexPlane {
       throw new TypeError("Unexpected scalar type " + typeof x);
     }
     return this.asBigInt(x);
+  }
+
+  // 2 ^ x
+  pow2Scalar(x) {
+    if (DEBUG_MODE && typeof x !== "number") {
+      throw new TypeError("Unexpected scalar type " + typeof x);
+    }
+    return this.asBigInt(2 ** (x + Number(this.exponent)), 0n);
   }
 
   complex(x, y) {
@@ -398,5 +416,9 @@ export function renderComplex(c, zoom, separator) {
     const decimals = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
     return c.x.toFixed(decimals) + (separator ?? ",") + c.y.toFixed(decimals);
   }
-  return c.plane.scalarToString(c.x) + (separator ?? ",") + c.plane.scalarToString(c.y);
+  return (
+    c.plane.scalarToString(c.x) +
+    (separator ?? ",") +
+    c.plane.scalarToString(c.y)
+  );
 }
