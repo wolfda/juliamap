@@ -134,7 +134,11 @@ function onViewportChanged() {
 async function onAppStateChanged(event) {
   switch (event.detail) {
     case StateAttributes.VIEWPORT:
-      appState.setDynamicPixelDensity(juliaExplorer.mandelExplorer.dynamicPixelDensity);
+      const density =
+        juliaExplorer.layout === Layout.JULIA
+          ? juliaExplorer.juliaExplorer.dynamicPixelDensity
+          : juliaExplorer.mandelExplorer.dynamicPixelDensity;
+      appState.setDynamicPixelDensity(density);
       break;
     case StateAttributes.RENDERING_ENGINE:
       await updateRenderer();
@@ -157,7 +161,7 @@ async function onAppStateChanged(event) {
 async function updateRenderer() {
   const renderer =
     appState.renderingEngine ?? (await getDefaultRenderingEngine());
-    juliaExplorer.detach();
+  juliaExplorer.detach();
   juliaExplorer = await JuliaExplorer.create({
     renderingEngine: renderer,
     options: new RenderOptions({
@@ -166,14 +170,12 @@ async function updateRenderer() {
       deep: appState.deep,
       pixelDensity: appState.pixelDensity,
     }),
-    onChanged: onViewportChanged,
     onRendered: updateStats,
   });
   juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);
   juliaExplorer.juliaExplorer.map.moveTo(appState.jcenter, appState.jzoom);
   juliaExplorer.setLayout(appState.layout);
   juliaExplorer.updateJuliaFn();
-  // juliaExplorer.resize(window.innerWidth, window.innerHeight);
 }
 
 function updatePalette() {
@@ -192,14 +194,17 @@ function updateMaxIter() {
 }
 
 function updatePixelDensity() {
-  juliaExplorer.mandelExplorer.options.pixelDensity = appState.pixelDensity;
-  juliaExplorer.juliaExplorer.options.pixelDensity = appState.pixelDensity;
-  juliaExplorer.mandelExplorer.dynamicPixelDensity =
-    appState.pixelDensity ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
-  juliaExplorer.juliaExplorer.dynamicPixelDensity =
-    appState.pixelDensity ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
-  juliaExplorer.mandelExplorer.render();
-  juliaExplorer.juliaExplorer.render();
+  if (juliaExplorer.layout === Layout.JULIA) {
+    juliaExplorer.juliaExplorer.options.pixelDensity = appState.pixelDensity;
+    juliaExplorer.juliaExplorer.dynamicPixelDensity =
+      appState.pixelDensity ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
+    juliaExplorer.juliaExplorer.render();
+  } else {
+    juliaExplorer.mandelExplorer.options.pixelDensity = appState.pixelDensity;
+    juliaExplorer.mandelExplorer.dynamicPixelDensity =
+      appState.pixelDensity ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
+    juliaExplorer.mandelExplorer.render();
+  }
 }
 
 function downloadViewport() {
