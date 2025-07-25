@@ -139,8 +139,8 @@ export class WebgpuRenderer extends Renderer {
     // 2. Configure our offscreen canvas
     // ------------------------------------
     const scale = Math.min(options.pixelDensity, 1);
-    const w = Math.floor(this.canvas.width * scale);
-    const h = Math.floor(this.canvas.height * scale);
+    const w = Math.ceil(this.canvas.width * scale);
+    const h = Math.ceil(this.canvas.height * scale);
 
     // ------------------------------------
     // 3. Write fractal parameters to GPU
@@ -220,10 +220,17 @@ export class WebgpuRenderer extends Renderer {
     // ------------------------------------
     // Use the main canvas's 2D context to draw the offscreen image:
     // If you want a simple "centered" or "fit" approach, you can do:
-    this.ctx.save();
-    this.ctx.scale(1 / scale, 1 / scale);
-    this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-    this.ctx.restore();
+    this.ctx.drawImage(
+      this.offscreenCanvas,
+      0,
+      0,
+      w,
+      h,
+      0,
+      0,
+      this.canvas.width,
+      this.canvas.height
+    );
 
     await this.gpuDevice.queue.onSubmittedWorkDone();
 

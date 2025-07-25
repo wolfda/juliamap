@@ -126,8 +126,8 @@ export class Webgl1Renderer extends Renderer {
 
     // const scale = Math.min(options.pixelDensity, 1);
     const scale = 0.5;
-    const w = Math.floor(this.canvas.width * scale);
-    const h = Math.floor(this.canvas.height * scale);
+    const w = Math.ceil(this.canvas.width * scale);
+    const h = Math.ceil(this.canvas.height * scale);
 
     gl.viewport(0, 0, w, h);
 
