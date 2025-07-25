@@ -400,7 +400,7 @@ export class FractalExplorer {
       const easedT = easeInOutSine(t);
       const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
 
-      this.#zoomAt(screenPos.x, screenPos.y, currentZoom);
+      this.#zoomAt(screenPos.x / DPR, screenPos.y / DPR, currentZoom);
 
       if (t < 1) {
         this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
