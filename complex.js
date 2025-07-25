@@ -1,4 +1,5 @@
 const DEBUG_MODE = false;
+const BITS_PER_DECIMAL = Math.log10(2);
 
 export class Complex {
   constructor(x, y) {
@@ -56,11 +57,11 @@ export class Complex {
 
   // z == a
   equals(a) {
-    return (a instanceof Complex || a instanceof ConstComplex) && this.x === a.x && this.y === a.y;
-  }
-
-  toString() {
-    return `Complex(${this.x}, ${this.y})`;
+    return (
+      (a instanceof Complex || a instanceof ConstComplex) &&
+      this.x === a.x &&
+      this.y === a.y
+    );
   }
 
   project(a) {
@@ -161,7 +162,7 @@ export class BigComplexPlane {
    * All numbers in the plane are expressed with a scale factor of 2^exponent.
    */
   constructor(exponent) {
-    this.exponent = BigInt(exponent);
+    this.exponent = typeof x === "bigint" ? exponent : BigInt(exponent);
   }
 
   /**
@@ -230,6 +231,10 @@ export class BigComplexPlane {
 
   isBigComplex() {
     return true;
+  }
+
+  scalarToString(x) {
+    return `${x}e${this.exponent}`;
   }
 }
 
@@ -371,4 +376,27 @@ class ConstBigComplex {
   const() {
     return this;
   }
+}
+
+export function parseComplex(cStr, separator) {
+  const [xStr, yStr] = cStr.split(separator ?? ",");
+  if (xStr.indexOf("e") === -1) {
+    return new Complex(parseFloat(xStr), parseFloat(yStr));
+  }
+  const [x, xExp] = xStr.split("e");
+  const [y, yExp] = yStr.split("e");
+  if (xExp !== yExp) {
+    throw Error("Inconsistent exponent");
+  }
+  const plane = new BigComplexPlane(BigInt(xExp));
+  return plane.complex(BigInt(x), BigInt(y));
+}
+
+export function renderComplex(c, zoom, separator) {
+  if (c.plane === undefined) {
+    // Native doubles
+    const decimals = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
+    return c.x.toFixed(decimals) + (separator ?? ",") + c.y.toFixed(decimals);
+  }
+  return c.plane.scalarToString(c.x) + (separator ?? ",") + c.plane.scalarToString(c.y);
 }

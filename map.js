@@ -28,18 +28,14 @@ export const MAX_ZOOM = 120;
 
 export class MapControl {
   constructor() {
-    this.plane = COMPLEX_PLANE;
-    this.center = this.plane.complex(0, 0);
-    this.zoom = 0;
-    this.velocity = this.plane.complex(0, 0); // Pan velocity
-    this.vz = 0; // "zoom velocity" for zoom inertia
-
     // We'll keep a single timestamp to measure time deltas
     // for move(), zoomBy(), pinch() calls.
     this.lastUpdateTime = null;
 
     // We track the inertia animation frame id so we can cancel it if needed
     this.inertiaRequestId = null;
+
+    this.moveTo(COMPLEX_PLANE.complex(0, 0), 0);
   }
 
   /**
@@ -47,8 +43,11 @@ export class MapControl {
    * e.g. after reading from the URL.
    */
   moveTo(center, zoom) {
-    this.center.project(center);
+    this.plane = center.plane ?? COMPLEX_PLANE;
+    this.center = center;
+    this.velocity = this.plane.complex(0, 0);
     this.zoom = Math.min(Math.max(zoom, 0), MAX_ZOOM);
+    this.vz = 0;
   }
 
   /**

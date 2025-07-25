@@ -1,8 +1,7 @@
-import { Complex, COMPLEX_PLANE } from "./complex.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE, parseComplex, renderComplex } from "./complex.js";
 import { Layout } from "./julia-explorer.js";
 import { Palette } from "./palette.js";
 
-const BITS_PER_DECIMAL = Math.log10(2);
 const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
 const ZERO_CENTER = [new Complex(0, 0), 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
@@ -215,26 +214,17 @@ function parseXYZ(xyz, def) {
     return def;
   }
   const components = xyz.split("_");
-  if (components.length != 3) {
+  if (components.length !== 3) {
     return def;
   }
   return [
-    new Complex(
-      parseFloat(components[0]) ?? def[0],
-      parseFloat(components[1]) ?? def[1]
-    ),
+    parseComplex(components[0] + "," + components[1]),
     parseFloat(components[2]) ?? def[2],
   ];
 }
 
 function renderXYZ(center, zoom) {
-  const precision = 3 + Math.ceil(zoom * BITS_PER_DECIMAL);
-  const c = COMPLEX_PLANE.complex().project(center);
-  return [
-    truncatePrecision(c.x ?? 0, precision),
-    truncatePrecision(c.y ?? 0, precision),
-    truncatePrecision(zoom ?? 0, 2),
-  ].join("_");
+  return renderComplex(center, zoom, "_") + "_" + zoom.toFixed(2);
 }
 
 function int(params, key, def) {
@@ -243,10 +233,6 @@ function int(params, key, def) {
 
 function float(params, key, def) {
   return params.has(key) ? parseFloat(params.get(key)) ?? def : def;
-}
-
-function truncatePrecision(x, precision) {
-  return parseFloat(x.toFixed(precision));
 }
 
 export const appState = AppState.parseFromAddressBar();
