@@ -51,6 +51,8 @@ export class AppStateEditor {
     this.pixelDensityRange = document.getElementById("pixelDensityRange");
     this.pixelDensityValue = document.getElementById("pixelDensityValue");
 
+    this.layoutSelect = document.getElementById("layoutSelect");
+
     this.defaultIter = 0;
     this.currentPixelDensity = 1;
 
@@ -88,6 +90,10 @@ export class AppStateEditor {
     this.pixelDensityRange.addEventListener("input", () => {
       appState.setPixelDensity(this.getPixelDensity());
       this.#refresh();
+    });
+
+    this.layoutSelect.addEventListener("change", () => {
+      appState.setLayout(this.layoutSelect.value);
     });
 
     appState.addEventListener("change", this.#onAppStateChanged.bind(this));
@@ -141,6 +147,8 @@ export class AppStateEditor {
       (this.iterAuto.checked || this.pixelDensityAuto.checked)
     ) {
       this.#refresh();
+    } else if (event.detail === StateAttributes.LAYOUT) {
+      this.layoutSelect.value = appState.layout;
     }
   }
 

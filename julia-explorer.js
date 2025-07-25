@@ -1,6 +1,7 @@
 import { Complex } from "./complex.js";
 import { FractalExplorer } from "./fractal-explorer.js";
 import { DEFAULT_FN, Fn } from "./julia.js";
+import { appState } from "./state.js";
 
 export const Layout = {
   SPLIT: "split",
@@ -73,11 +74,12 @@ export class JuliaExplorer {
   async #onClick() {
     switch (this.layout) {
       case Layout.MANDEL:
-        await this.setLayout(Layout.JULIA);
+        appState.setLayout(Layout.JULIA);
         break;
 
       case Layout.JULIA:
-        await this.setLayout(Layout.MANDEL);
+        appState.setLayout(Layout.MANDEL);
+        // await this.setLayout(Layout.MANDEL);
         break;
     }
   }

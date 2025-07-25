@@ -72,10 +72,6 @@ document.addEventListener("keydown", (e) => {
     );
     const duration = originalZoom * 1000 * 0.5;
     fractalExplorer.animateZoom(screenCenter, 0, originalZoom, duration);
-  } else if (e.key === "s") {
-    juliaExplorer.setLayout(
-      juliaExplorer.layout !== Layout.SPLIT ? Layout.SPLIT : Layout.MANDEL
-    );
   }
 });
 
@@ -151,6 +147,9 @@ async function onAppStateChanged(event) {
       break;
     case StateAttributes.PIXEL_DENSITY:
       updatePixelDensity();
+      break;
+    case StateAttributes.LAYOUT:
+      juliaExplorer.setLayout(appState.layout);
       break;
   }
 }
