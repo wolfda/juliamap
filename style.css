@@ -94,6 +94,7 @@ body {
   font-size: 14px;
   border-radius: 4px;
   text-align: right;
+  z-index: 10;
 }
 
 #flopStats {
@@ -138,6 +139,7 @@ body {
   column-gap: 6px;
   row-gap: 4px;
   text-align: left;
+  z-index: 10;
 }
 
 #controlPanel .full {
