@@ -5,7 +5,7 @@ import { Palette } from "./palette.js";
 import { RenderingEngine, RenderOptions } from "./renderers/renderer.js";
 import { createRenderer } from "./renderers/renderers.js";
 
-const DPR = window.devicePixelRatio ?? 1;
+export const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 80; // ~12 fps preview
 const FPS_WINDOW_MS = 1000; // Aggregate FPS
 const TARGET_FPS = 30;
@@ -149,7 +149,7 @@ export class FractalExplorer {
 
   #onDoubleClick(e) {
     this.map.stop();
-    const screenPos = new Complex(e.layerX, e.layerY);
+    const screenPos = new Complex(e.offsetX, e.offsetY);
     this.animateZoom(screenPos, this.map.zoom, this.map.zoom + 1, 100);
   }
 
@@ -400,7 +400,7 @@ export class FractalExplorer {
       const easedT = easeInOutSine(t);
       const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
 
-      this.#zoomAt(screenPos.x / DPR, screenPos.y / DPR, currentZoom);
+      this.#zoomAt(screenPos.x, screenPos.y, currentZoom);
 
       if (t < 1) {
         this.zoomAnimationId = requestAnimationFrame(tick.bind(this));

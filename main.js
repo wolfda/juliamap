@@ -9,6 +9,7 @@ import { Complex } from "./complex.js";
 import { Palette } from "./palette.js";
 
 import { AppStateEditor } from "./state-editor.js";
+import { DPR } from "./fractal-explorer.js";
 const MAX_UPDATE_STATS_FREQ = 10;
 
 let juliaExplorer = null;
@@ -67,8 +68,8 @@ document.addEventListener("keydown", (e) => {
     }
     const originalZoom = fractalExplorer.map.zoom;
     const screenCenter = new Complex(
-      fractalExplorer.canvas.width / 2,
-      fractalExplorer.canvas.height / 2
+      fractalExplorer.canvas.width / 2 / DPR,
+      fractalExplorer.canvas.height / 2 / DPR
     );
     const duration = originalZoom * 1000 * 0.5;
     fractalExplorer.animateZoom(screenCenter, 0, originalZoom, duration);
