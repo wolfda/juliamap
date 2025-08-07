@@ -147,10 +147,27 @@ export class FractalExplorer {
     this.#zoomAt(e.offsetX, e.offsetY, this.map.zoom - e.deltaY * 0.002);
   }
 
+  #touchPos(touch) {
+    const rect = this.canvas.getBoundingClientRect();
+    const canvasX = (touch.clientX - rect.left) * (this.canvas.width / rect.width);
+    const canvasY = (touch.clientY - rect.top) * (this.canvas.height / rect.height);
+    return new Complex(canvasX / DPR, canvasY / DPR);
+
+  }
+
+  #offsetPos(e) {
+    if (e instanceof MouseEvent) {
+      return new Complex(e.offsetX, e.offsetY);
+    } else if (e instanceof TouchEvent) {
+      return this.#touchPos(e.changedTouches[0])
+    } else {
+      throw Error("Unsupported event", e);
+    }
+  }
+
   #onDoubleClick(e) {
     this.map.stop();
-    const screenPos = new Complex(e.offsetX, e.offsetY);
-    this.animateZoom(screenPos, this.map.zoom, this.map.zoom + 1, 100);
+    this.animateZoom(this.#offsetPos(e), this.map.zoom, this.map.zoom + 1, 100);
   }
 
   #onTouchStart(e) {
@@ -209,7 +226,7 @@ export class FractalExplorer {
       // Pinch to zoom
       const dist = getDistance(activeTouches[0], activeTouches[1]);
       const dzoom = Math.log2(dist / this.initialDistance);
-      const mid = getMidpoint(activeTouches[0], activeTouches[1]);
+      const mid = this.#touchPos(activeTouches[0]).add(this.#touchPos(activeTouches[1])).divScalar(2);
       this.#zoomAt(mid.x, mid.y, this.initialZoom + dzoom);
     }
   }
