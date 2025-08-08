@@ -141,11 +141,12 @@ export class MapControl {
     this.zoomBy(newZoom - this.zoom);
   }
 
+  precisionAtZoom(zoom) {
+    return zoom <= NATIVE_COMPLEX_PRECISION ? undefined : 11 + Math.ceil(zoom);
+  }
+
   maybeReproject() {
-    const targetExponent =
-      this.zoom <= NATIVE_COMPLEX_PRECISION
-        ? undefined
-        : 11 + Math.ceil(this.zoom);
+    const targetExponent = this.precisionAtZoom(this.zoom);
     if (Number(this.plane.exponent) === targetExponent) {
       return;
     }

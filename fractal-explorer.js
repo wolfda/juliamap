@@ -1,4 +1,4 @@
-import { Complex } from "./complex.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "./complex.js";
 import { DEFAULT_FN } from "./julia.js";
 import { MapControl } from "./map.js";
 import { Palette } from "./palette.js";
@@ -141,6 +141,12 @@ export class FractalExplorer {
     this.onMapChanged?.();
   }
 
+  #moveTo(center, newZoom) {
+    this.map.moveTo(center, newZoom);
+    this.render();
+    this.onMapChanged?.();
+  }
+
   #onWheel(e) {
     e.preventDefault();
     this.map.stop();
@@ -149,17 +155,18 @@ export class FractalExplorer {
 
   #touchPos(touch) {
     const rect = this.canvas.getBoundingClientRect();
-    const canvasX = (touch.clientX - rect.left) * (this.canvas.width / rect.width);
-    const canvasY = (touch.clientY - rect.top) * (this.canvas.height / rect.height);
+    const canvasX =
+      (touch.clientX - rect.left) * (this.canvas.width / rect.width);
+    const canvasY =
+      (touch.clientY - rect.top) * (this.canvas.height / rect.height);
     return new Complex(canvasX / DPR, canvasY / DPR);
-
   }
 
   #offsetPos(e) {
     if (e instanceof MouseEvent) {
       return new Complex(e.offsetX, e.offsetY);
     } else if (e instanceof TouchEvent) {
-      return this.#touchPos(e.changedTouches[0])
+      return this.#touchPos(e.changedTouches[0]);
     } else {
       throw Error("Unsupported event", e);
     }
@@ -226,7 +233,9 @@ export class FractalExplorer {
       // Pinch to zoom
       const dist = getDistance(activeTouches[0], activeTouches[1]);
       const dzoom = Math.log2(dist / this.initialDistance);
-      const mid = this.#touchPos(activeTouches[0]).add(this.#touchPos(activeTouches[1])).divScalar(2);
+      const mid = this.#touchPos(activeTouches[0])
+        .add(this.#touchPos(activeTouches[1]))
+        .divScalar(2);
       this.#zoomAt(mid.x, mid.y, this.initialZoom + dzoom);
     }
   }
@@ -418,6 +427,45 @@ export class FractalExplorer {
       const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
 
       this.#zoomAt(screenPos.x, screenPos.y, currentZoom);
+
+      if (t < 1) {
+        this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
+      }
+    }
+
+    this.zoomAnimationId = requestAnimationFrame(tick.bind(this));
+  }
+
+  animateDive(center, zoomStart, zoomEnd, duration) {
+    if (this.zoomAnimationId) {
+      cancelAnimationFrame(this.zoomAnimationId);
+    }
+
+    let startTime = null;
+
+    let projectedCenter = null;
+    let plane = null;
+
+    function tick(timestamp) {
+      if (!startTime) {
+        startTime = timestamp;
+      }
+      const elapsed = timestamp - startTime;
+      let t = Math.min(elapsed / duration, 1);
+      const easedT = easeInOutSine(t);
+      const currentZoom = zoomStart + (zoomEnd - zoomStart) * easedT;
+
+      // Reproject the center if needed
+      const targetPrecision = this.map.precisionAtZoom(currentZoom);
+      if (plane === null || targetPrecision != plane.exponent) {
+        plane =
+          targetPrecision === undefined
+            ? COMPLEX_PLANE
+            : new BigComplexPlane(targetPrecision);
+        projectedCenter = plane.complex().project(center);
+      }
+
+      this.#moveTo(projectedCenter, currentZoom);
 
       if (t < 1) {
         this.zoomAnimationId = requestAnimationFrame(tick.bind(this));

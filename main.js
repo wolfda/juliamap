@@ -67,12 +67,9 @@ document.addEventListener("keydown", (e) => {
         return;
     }
     const originalZoom = fractalExplorer.map.zoom;
-    const screenCenter = new Complex(
-      fractalExplorer.canvas.width / 2 / DPR,
-      fractalExplorer.canvas.height / 2 / DPR
-    );
+    const center = fractalExplorer.map.center;
     const duration = originalZoom * 1000 * 0.5;
-    fractalExplorer.animateZoom(screenCenter, 0, originalZoom, duration);
+    fractalExplorer.animateDive(center, 0, originalZoom, duration);
   }
 });
 
