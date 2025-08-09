@@ -36,9 +36,9 @@ onmessage = function (e) {
     const rowsCount = endY - startY;
     const imageDataArray = new Uint8ClampedArray(width * rowsCount * 4);
 
-    const plane = complexPlaneForExponent(centerExponent);
-    const centerp = plane.constComplex(center.x, center.y);
-    const param0p = plane.constComplex(param0.x, param0.y);
+    const centerp = toComplex(center.x, center.y, centerExponent).const();
+    const plane = centerp.plane ?? COMPLEX_PLANE;
+    const param0p = plane.complex().project(toComplex(param0.x, param0.y, param0Exponent)).const();
     const z = plane.complex();
     const screenPos = COMPLEX_PLANE.complex();
     const screenPosp = plane.complex();
@@ -114,6 +114,7 @@ function getColor(escapeVelocity, maxIter, paletteId) {
   }
 }
 
-function complexPlaneForExponent(exponent) {
-  return exponent ? new BigComplexPlane(exponent) : COMPLEX_PLANE;
+function toComplex(x, y, exponent) {
+  const plane = exponent ? new BigComplexPlane(exponent) : COMPLEX_PLANE;  
+  return plane.complex(x, y);
 }
