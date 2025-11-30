@@ -7,6 +7,10 @@ import { Renderer, RenderingEngine, RenderResults } from "./renderer.js";
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
 const FLOP_PER_ITER = 9;
 
+// Maximum (absolute) exponent we allow for the *local* pixel->complex scale
+// in base-2 log. This keeps u.scale comfortably inside f32's normal range.
+const MAX_LOCAL_EXPONENT = 80;
+
 export class WebgpuRenderer extends Renderer {
   static async create(canvas, ctx) {
     const renderer = new WebgpuRenderer(canvas, ctx);
@@ -75,7 +79,7 @@ export class WebgpuRenderer extends Renderer {
     // Create a buffer for the uniform data.
     // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
     this.gpuUniformBuffer = this.gpuDevice.createBuffer({
-      size: 48,
+      size: 56, // was 48; we add 2 more f32s (scale, perturbScale)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -114,6 +118,41 @@ export class WebgpuRenderer extends Renderer {
     });
   }
 
+  /**
+   * Split the pixel->complex scale into:
+   *  - scale:        local per-pixel scale used on the GPU (safe exponent range)
+   *  - perturbScale: s so that globalScale = scale * s
+   *
+   * We only rescale when using perturbation, and when the scale is so small
+   * that it would drop into denormals at f32 precision.
+   */
+  #computePerturbationScale(globalScale, usePerturbation) {
+    if (!usePerturbation || globalScale === 0 || !Number.isFinite(globalScale)) {
+      return { scale: globalScale, perturbScale: 1.0 };
+    }
+
+    const absScale = Math.abs(globalScale);
+    if (absScale === 0) {
+      return { scale: 0.0, perturbScale: 1.0 };
+    }
+
+    const expGlobal = Math.floor(Math.log2(absScale));
+
+    // If the exponent is already "comfortable", don't touch it.
+    if (expGlobal >= -MAX_LOCAL_EXPONENT) {
+      return { scale: globalScale, perturbScale: 1.0 };
+    }
+
+    // Clamp the *local* exponent to -MAX_LOCAL_EXPONENT, and push the rest
+    // into perturbScale (s).
+    const localExp = -MAX_LOCAL_EXPONENT;
+    const sExp = expGlobal - localExp;        // globalExp = localExp + sExp
+    const perturbScale = Math.pow(2, sExp);   // s = 2^sExp
+    const scale = globalScale / perturbScale; // so globalScale = scale * s
+
+    return { scale, perturbScale };
+  }
+
   resize(width, height) {
     this.offscreenCanvas.width = width;
     this.offscreenCanvas.height = height;
@@ -138,9 +177,19 @@ export class WebgpuRenderer extends Renderer {
     // ------------------------------------
     // 2. Configure our offscreen canvas
     // ------------------------------------
-    const scale = Math.min(options.pixelDensity, 1);
-    const w = Math.ceil(this.canvas.width * scale);
-    const h = Math.ceil(this.canvas.height * scale);
+    const pixelScale = Math.min(options.pixelDensity, 1);
+    const w = Math.ceil(this.canvas.width * pixelScale);
+    const h = Math.ceil(this.canvas.height * pixelScale);
+
+    // Global pixel->complex scale
+    const globalScale = (4 / w) * Math.pow(2, -map.zoom);
+
+    // For deep (perturbation) rendering, split the scale into a local part
+    // (u.scale) and a global factor s = u.perturbScale.
+    const { scale: gpuScale, perturbScale } = this.#computePerturbationScale(
+      globalScale,
+      options.deep
+    );
 
     // ------------------------------------
     // 3. Write fractal parameters to GPU
@@ -158,10 +207,12 @@ export class WebgpuRenderer extends Renderer {
     }
     const samples = Math.floor(Math.max(options.pixelDensity, 1));
 
-    const uniformArray = new ArrayBuffer(48);
+    // NOTE: now 56 bytes instead of 48
+    const uniformArray = new ArrayBuffer(56);
     const dataView = new DataView(uniformArray);
     const mapCenter = COMPLEX_PLANE.complex().project(map.center);
     const fnParam0 = COMPLEX_PLANE.complex().project(options.fn.param0);
+
     dataView.setUint32(0, options.deep ? 1 : 0, true); // usePerturbation
     dataView.setFloat32(4, map.zoom, true); // zoom
     dataView.setFloat32(8, orbit ? orbit.sx : mapCenter.x, true); // center
@@ -174,6 +225,8 @@ export class WebgpuRenderer extends Renderer {
     dataView.setUint32(36, options.fn.id, true); // functionId
     dataView.setFloat32(40, fnParam0.x, true); // param0
     dataView.setFloat32(44, fnParam0.y, true); // param0
+    dataView.setFloat32(48, gpuScale, true);      // scale
+    dataView.setFloat32(52, perturbScale, true);  // perturbScale
 
     this.gpuDevice.queue.writeBuffer(this.gpuUniformBuffer, 0, uniformArray);
 
@@ -306,6 +359,8 @@ struct FractalUniforms {
     paletteId      : u32,
     functionId     : u32,
     param0         : vec2f,
+    scale          : f32,
+    perturbScale   : f32,
 };
 
 struct AtomicU64 {
@@ -435,6 +490,9 @@ const ZEBRA_PALETTE_ID = 2u;
 const WIKIPEDIA_PALETTE_ID = 3u;
 
 fn getColor(escapeVelocity: f32) -> vec3f {
+    // if (escapeVelocity < 0.0) {
+    //     return vec3f(1.0, 0.0, 1.0); // Magenta for NaN/infinity
+    // }
     if (escapeVelocity >= f32(u.maxIter)) {
         return BLACK;
     }
@@ -458,9 +516,17 @@ const FN_MANDELBROT = 0u;
 const FN_JULIA = 1u;
 const BAILOUT = 128;
 
+fn isFinite(x: f32) -> bool {
+    return x * 0.0 == 0.0;
+}
+
 // Smoothen the escape velocity to avoid having bands of colors
 fn smoothEscapeVelocity(iter: u32, squareMod: f32) -> f32 {
-  return f32(iter) + 1 - log(log(squareMod)) / log(2);
+    // squareMod may have overflowed, return iter
+    if (!isFinite(squareMod)) {
+        return f32(iter);
+    }
+    return f32(iter) + 1 - log2(log(squareMod));
 }
   
 fn incrementIterations(value: u32) {
@@ -487,20 +553,27 @@ fn julia(z0: vec2f, c: vec2f, maxIter: u32) -> f32 {
     return f32(maxIter);
 }
 
-fn juliaPerturb(dz0: vec2f, dc: vec2f, maxIter: u32) -> f32 {
-    var dz = dz0;
+fn juliaPerturb(dz0_hat: vec2f, dc_hat: vec2f, maxIter: u32) -> f32 {
+    // dz_hat and dc_hat are the *scaled* perturbations.
+    var dz_hat = dz0_hat;
     var z = referenceOrbit[0];
 
-    for (var i = 0u; i < maxIter; i += 1u) {
-        // ∆z = (2 z + ∆z) ∆z + ∆c 
-        dz = complexMul(2 * z + dz, dz) + dc;
-        z = referenceOrbit[i + 1];
+    let s = u.perturbScale;
 
-        let squareMod = complexSquareMod(z + dz);
+    for (var i = 0u; i < maxIter; i += 1u) {
+        // Δẑ_{n+1} = (2 z_n + s Δẑ_n) Δẑ_n + Δĉ
+        dz_hat = complexMul(2.0 * z + s * dz_hat, dz_hat) + dc_hat;
+
+        // Reconstruct the true orbit: w_n = z_n + s Δẑ_n
+        let w = z + s * dz_hat;
+        let squareMod = complexSquareMod(w);
+
         if (squareMod > BAILOUT * BAILOUT) {
             incrementIterations(i);
             return smoothEscapeVelocity(i, squareMod);
         }
+
+        z = referenceOrbit[i + 1];
     }
     incrementIterations(maxIter);
     return f32(maxIter);
@@ -549,12 +622,13 @@ fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3
 
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
-    let scaleFactor = 4 / u.resolution.x * exp2(-u.zoom) * vec2f(1, -1);
-    // return vec4f(interpolatePalette6Color(RAINBOW, fragCoord.xy.x / u.resolution.x + 0.5), 1);
-    if (u.samples == 1) {
-        return vec4f(renderOne(fragCoord.xy, scaleFactor), 1);
+    // Per-pixel scale in the complex plane (already rescaled on the CPU).
+    let scaleFactor = u.scale * vec2f(1.0, -1.0);
+
+    if (u.samples == 1u) {
+        return vec4f(renderOne(fragCoord.xy, scaleFactor), 1.0);
     } else {
-        return vec4f(renderSuperSample(fragCoord.xy, scaleFactor, u.samples), 1);
+        return vec4f(renderSuperSample(fragCoord.xy, scaleFactor, u.samples), 1.0);
     }
 }
 `;

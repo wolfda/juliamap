@@ -24,7 +24,7 @@ const ZOOM_FRICTION = 0.95;
 const NATIVE_COMPLEX_PRECISION = 40;
 
 // Maximum allowed zoom level. Rendering becomes unstable past this point.
-export const MAX_ZOOM = 120;
+export const MAX_ZOOM = 200;
 
 export class MapControl {
   constructor() {
