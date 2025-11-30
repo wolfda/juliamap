@@ -4,8 +4,8 @@ import {
   COMPLEX_PLANE,
   renderComplex,
   parseComplex,
-} from "../complex.js";
-import { DEFAULT_FN } from "../julia.js";
+} from "../math/complex.js";
+import { DEFAULT_FN } from "../math/julia.js";
 import { MapControl } from "../map.js";
 import { Palette } from "../palette.js";
 import { RenderingEngine, RenderOptions } from "../renderers/renderer.js";

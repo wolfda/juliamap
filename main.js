@@ -5,11 +5,9 @@ import {
   getSupportedRenderers,
 } from "./renderers/renderers.js";
 import { JuliaExplorer, Layout } from "./julia-explorer.js";
-import { Complex } from "./complex.js";
 import { Palette } from "./palette.js";
 
 import { AppStateEditor } from "./state-editor.js";
-import { DPR } from "./fractal-explorer.js";
 const MAX_UPDATE_STATS_FREQ = 10;
 
 let juliaExplorer = null;

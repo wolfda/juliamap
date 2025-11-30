@@ -1,4 +1,4 @@
-import { BigComplexPlane, Complex, COMPLEX_PLANE, parseComplex, renderComplex } from "./complex.js";
+import { Complex, parseComplex, renderComplex } from "./math/complex.js";
 import { Layout } from "./julia-explorer.js";
 import { Palette } from "./palette.js";
 

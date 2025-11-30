@@ -1,5 +1,5 @@
-import { julia, FN_JULIA, FN_MANDELBROT } from "../julia.js";
-import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../complex.js";
+import { julia, FN_JULIA, FN_MANDELBROT } from "../math/julia.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../math/complex.js";
 import {
   BLACK,
   ELECTRIC_PALETTE_ID,

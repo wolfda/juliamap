@@ -1,5 +1,5 @@
-import { COMPLEX_PLANE } from "../complex.js";
-import { FN_JULIA, FN_MANDELBROT, Orbit } from "../julia.js"; // for deep zoom perturbation
+import { COMPLEX_PLANE } from "../math/complex.js";
+import { FN_JULIA, FN_MANDELBROT, Orbit } from "../math/julia.js"; // for deep zoom perturbation
 import { getPaletteId } from "../palette.js";
 import { hasWebgl2 } from "./capabilities.js";
 import { RenderResults, Renderer, RenderingEngine } from "./renderer.js";

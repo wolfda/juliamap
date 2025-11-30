@@ -1,4 +1,4 @@
-import { Complex, COMPLEX_PLANE } from "./complex.js";
+import { Complex, COMPLEX_PLANE } from "../math/complex.js";
 
 export const FN_MANDELBROT = 0;
 export const FN_JULIA = 1;

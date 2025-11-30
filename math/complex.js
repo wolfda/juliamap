@@ -1,6 +1,15 @@
+/**
+ * Abstraction for complex numbers. It provides 2 implementations:
+ * - Complex: for native doubles
+ * - BigComplex: for fixed point arithmetic with big integers
+ */
+
+
+// In debug mode, adds additional checks and type assertions.
 const DEBUG_MODE = false;
 const BITS_PER_DECIMAL = Math.log10(2);
 
+/** A mutable complex number */
 export class Complex {
   constructor(x, y) {
     this.x = x ?? 0;
@@ -85,6 +94,7 @@ export class Complex {
   }
 }
 
+/** An immutable complex number */ 
 class ConstComplex {
   constructor(x, y) {
     this.x = x ?? 0;
@@ -166,6 +176,11 @@ function ieee754Parts(x) {
   return { sign, exponent, fraction };
 }
 
+/** 
+ * A fixed point arithmetic plane for complex numbers.
+ * The plane is defined at a specific exponent, and all complex number instances 
+ * created from the planes share the same exponent.
+ */
 export class BigComplexPlane {
   /**
    * All numbers in the plane are expressed with a scale factor of 2^exponent.
@@ -175,6 +190,7 @@ export class BigComplexPlane {
   }
 
   /**
+   * Convert a native double into the fixed point representation of the plane.
    * @param {Number} x
    * @return {BigInt}
    */
@@ -202,6 +218,8 @@ export class BigComplexPlane {
   }
 
   /**
+   * Convert a fixed point number into a native double.
+   * Warning: this is a lossy converstion. Only use for display/debug purposes.
    * @param {BigInt} x
    * @returns {Number}
    */
@@ -212,6 +230,11 @@ export class BigComplexPlane {
     return Number(x) * Math.pow(2, -Number(this.exponent));
   }
 
+  /**
+   * Convert a native double into the fixed point representation of the plane.
+   * @param {Number} x
+   * @returns {BigInt}
+   */
   scalar(x) {
     if (DEBUG_MODE && typeof x !== "number") {
       throw new TypeError("Unexpected scalar type " + typeof x);
@@ -219,7 +242,11 @@ export class BigComplexPlane {
     return this.asBigInt(x);
   }
 
-  // 2 ^ x
+  /**
+   * Compute 2^x, in fixed point arithmetic.
+   * @param {Number} x 
+   * @returns {BigInt}
+   */
   pow2Scalar(x) {
     if (DEBUG_MODE && typeof x !== "number") {
       throw new TypeError("Unexpected scalar type " + typeof x);
@@ -227,6 +254,12 @@ export class BigComplexPlane {
     return this.asBigInt(2 ** (x + Number(this.exponent)), 0n);
   }
 
+  /**
+   * Create a new complex number on the plane.
+   * @param {Number} x
+   * @param {Number} y
+   * @returns {BigComplex}
+   */
   complex(x, y) {
     return new BigComplex(this, this.asBigInt(x), this.asBigInt(y));
   }
@@ -256,6 +289,9 @@ export class BigComplexPlane {
   }
 }
 
+/**
+ * A mutable complex number on a fixed point arithmetic plane.
+ */
 export class BigComplex {
   constructor(plane, x, y) {
     this.plane = plane;
@@ -350,12 +386,19 @@ export class BigComplex {
     return `BigComplex(exponent=${this.plane.exponent}, x=${this.x}, y=${this.y})`;
   }
 
+  /**
+   * Reproject a complex number onto this plane.
+   * @param {Complex|BigComplex} a 
+   * @returns {Complex|BigComplex}
+   */
   project(a) {
     const sourcePlane = a.plane ?? COMPLEX_PLANE;
     if (!sourcePlane.isBigComplex()) {
+      // The source plane is a native Complex
       this.x = this.plane.asBigInt(a.x);
       this.y = this.plane.asBigInt(a.y);
     } else {
+      // The source plane is a BigComplex. Shift the mantissa by the exponent delta.
       const exponentDelta = this.plane.exponent - a.plane.exponent;
       if (exponentDelta === 0n) {
         this.x = a.x;

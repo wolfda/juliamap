@@ -1,5 +1,5 @@
-import { BigComplexPlane, Complex, COMPLEX_PLANE } from "./complex.js";
-import { DEFAULT_FN } from "./julia.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "./math/complex.js";
+import { DEFAULT_FN } from "./math/julia.js";
 import { MapControl } from "./map.js";
 import { Palette } from "./palette.js";
 import { RenderingEngine, RenderOptions } from "./renderers/renderer.js";
