@@ -1,5 +1,5 @@
 import { julia, FN_JULIA, FN_MANDELBROT } from "../math/julia.js";
-import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../math/complex.js";
+import { BigComplexPlane, COMPLEX_PLANE } from "../math/complex.js";
 import {
   BLACK,
   ELECTRIC_PALETTE_ID,
@@ -10,7 +10,7 @@ import {
   wikipediaColor,
   ZEBRA_PALETTE_ID,
   zebraColor,
-} from "../palette.js";
+} from "../core/palette.js";
 
 onmessage = function (e) {
   try {

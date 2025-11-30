@@ -1,13 +1,7 @@
-import { Complex } from "./math/complex.js";
+import { Complex } from "../math/complex.js";
 import { FractalExplorer } from "./fractal-explorer.js";
-import { DEFAULT_FN, Fn } from "./math/julia.js";
-import { appState } from "./state.js";
-
-export const Layout = {
-  SPLIT: "split",
-  MANDEL: "mandel",
-  JULIA: "julia",
-};
+import { DEFAULT_FN, Fn } from "../math/julia.js";
+import { appState, Layout } from "../core/state.js";
 
 export class JuliaExplorer {
   static async create({

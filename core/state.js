@@ -1,6 +1,11 @@
-import { Complex, parseComplex, renderComplex } from "./math/complex.js";
-import { Layout } from "./julia-explorer.js";
+import { Complex, parseComplex, renderComplex } from "../math/complex.js";
 import { Palette } from "./palette.js";
+
+export const Layout = {
+  SPLIT: "split",
+  MANDEL: "mandel",
+  JULIA: "julia",
+};
 
 const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
 const ZERO_CENTER = [new Complex(0, 0), 0];
@@ -15,6 +20,7 @@ export const StateAttributes = {
   MAX_ITER: "maxIter",
   PIXEL_DENSITY: "pixelDensity",
 };
+
 
 export class AppState extends EventTarget {
   static parseFromAddressBar() {

@@ -12,7 +12,7 @@
 // main.js must convert from mouse/touch/wheel to fractal deltas.
 // --------------------------------------
 
-import { BigComplexPlane, Complex, COMPLEX_PLANE } from "./math/complex.js";
+import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../math/complex.js";
 
 // Velocities
 const MIN_VELOCITY = 1e-3;

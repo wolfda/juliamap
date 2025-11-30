@@ -1,6 +1,6 @@
 import { COMPLEX_PLANE } from "../math/complex.js";
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../math/julia.js";
-import { getPaletteId } from "../palette.js";
+import { getPaletteId } from "../core/palette.js";
 import { hasWebgpu } from "./capabilities.js";
 import { Renderer, RenderingEngine, RenderResults } from "./renderer.js";
 

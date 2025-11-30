@@ -1,6 +1,6 @@
-import { Palette } from "./palette.js";
-import { RenderingEngine } from "./renderers/renderer.js";
-import { appState, StateAttributes } from "./state.js";
+import { Palette } from "../core/palette.js";
+import { RenderingEngine } from "../renderers/renderer.js";
+import { appState, StateAttributes } from "../core/state.js";
 
 const PALETTES = [
   Palette.WIKIPEDIA,

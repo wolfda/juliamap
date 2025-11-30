@@ -6,8 +6,8 @@ import {
   parseComplex,
 } from "../math/complex.js";
 import { DEFAULT_FN } from "../math/julia.js";
-import { MapControl } from "../map.js";
-import { Palette } from "../palette.js";
+import { MapControl } from "../core/map.js";
+import { Palette } from "../core/palette.js";
 import { RenderingEngine, RenderOptions } from "../renderers/renderer.js";
 import { createRenderer, isEngineSupported } from "../renderers/renderers.js";
 import { TestLogger } from "./test-logger.js";

@@ -1,13 +1,13 @@
-import { RenderOptions } from "./renderers/renderer.js";
-import { appState, StateAttributes } from "./state.js";
+import { RenderOptions } from "../renderers/renderer.js";
+import { appState, StateAttributes } from "../core/state.js";
 import {
   getDefaultRenderingEngine,
   getSupportedRenderers,
-} from "./renderers/renderers.js";
-import { JuliaExplorer, Layout } from "./julia-explorer.js";
-import { Palette } from "./palette.js";
-
-import { AppStateEditor } from "./state-editor.js";
+} from "../renderers/renderers.js";
+import { JuliaExplorer } from "../ui/julia-explorer.js";
+import { Palette } from "../core/palette.js";
+import { Layout } from "../core/state.js";
+import { AppStateEditor } from "../ui/state-editor.js";
 const MAX_UPDATE_STATS_FREQ = 10;
 
 let juliaExplorer = null;
