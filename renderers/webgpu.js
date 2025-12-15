@@ -22,12 +22,15 @@ export class WebgpuRenderer extends Renderer {
     this.canvas = canvas;
     this.ctx = ctx;
     this.gpuDevice = undefined;
-    this.offscreenCanvas = undefined;
-    this.offscreenGpuContext = undefined;
+    this.canvasFormat = undefined;
+    this.gpuContext = undefined;
     this.gpuPipeline = undefined;
     this.gpuUniformBuffer = undefined;
     this.gpuReferenceOrbitBuffer = undefined;
     this.gpuBindGroup = undefined;
+    this.orbitWorker = undefined;
+    this.nextOrbitRequestId = 1;
+    this.pendingOrbitRequests = new Map();
   }
 
   id() {
@@ -40,22 +43,12 @@ export class WebgpuRenderer extends Renderer {
     }
     const adapter = await navigator.gpu.requestAdapter();
     this.gpuDevice = await adapter.requestDevice();
-    // ----------------------------------------------
-    // 1. Create a hidden offscreen canvas + context
-    // ----------------------------------------------
-    this.offscreenCanvas = document.createElement("canvas");
-    this.offscreenCanvas.width = this.canvas.width;
-    this.offscreenCanvas.height = this.canvas.height;
-    this.offscreenCanvas.style.display = "none";
-    document.body.appendChild(this.offscreenCanvas);
-
-    this.offscreenGpuContext = this.offscreenCanvas.getContext("webgpu");
-
-    const format = navigator.gpu.getPreferredCanvasFormat();
-
-    this.offscreenGpuContext.configure({
+    this.#initOrbitWorker();
+    this.gpuContext = this.canvas.getContext("webgpu");
+    this.canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    this.gpuContext.configure({
       device: this.gpuDevice,
-      format: format,
+      format: this.canvasFormat,
       alphaMode: "premultiplied",
     });
 
@@ -68,7 +61,7 @@ export class WebgpuRenderer extends Renderer {
       fragment: {
         module: await this.#createShaderModule(wgslFragmentShader),
         entryPoint: "main",
-        targets: [{ format }],
+        targets: [{ format: this.canvasFormat }],
       },
       primitive: {
         topology: "triangle-strip",
@@ -153,9 +146,100 @@ export class WebgpuRenderer extends Renderer {
     return { scale, perturbScale };
   }
 
+  #initOrbitWorker() {
+    try {
+      this.orbitWorker = new Worker(
+        new URL("./orbit-worker.js", import.meta.url),
+        { type: "module" }
+      );
+      this.orbitWorker.onmessage = ({ data }) => {
+        const { requestId, orbit, error } = data;
+        const pending = this.pendingOrbitRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+        this.pendingOrbitRequests.delete(requestId);
+        if (error) {
+          pending.reject?.(new Error(error));
+        } else {
+          if (orbit?.iters && !(orbit.iters instanceof Float32Array)) {
+            orbit.iters = new Float32Array(orbit.iters);
+          }
+          pending.resolve?.(orbit);
+        }
+      };
+      this.orbitWorker.onerror = (err) => {
+        console.warn("[orbit worker] error", err);
+      };
+    } catch (err) {
+      console.warn("[orbit worker] failed to initialize; falling back to main thread", err);
+      this.orbitWorker = undefined;
+    }
+  }
+
+  #serializeComplex(c) {
+    if (!c) {
+      return { x: 0, y: 0, planeExponent: null };
+    }
+    const plane = c.plane ?? COMPLEX_PLANE;
+    const isBig = plane.isBigComplex();
+    return {
+      x: isBig ? c.x : c.x,
+      y: isBig ? c.y : c.y,
+      planeExponent: isBig ? plane.exponent : null,
+    };
+  }
+
+  async #computeOrbit(map, w, h, maxIter, options) {
+    if (!this.orbitWorker) {
+      return this.#computeOrbitSync(map, w, h, maxIter, options);
+    }
+
+    const mapPlane = map.plane ?? COMPLEX_PLANE;
+    const requestId = this.nextOrbitRequestId++;
+    const payload = {
+      map: {
+        planeExponent: mapPlane.isBigComplex() ? mapPlane.exponent : null,
+        center: this.#serializeComplex(map.center),
+        zoom: map.zoom,
+      },
+      width: w,
+      height: h,
+      maxIter,
+      fnId: options.fn.id,
+      fnParam0: this.#serializeComplex(options.fn.param0),
+    };
+
+    return new Promise((resolve, reject) => {
+      this.pendingOrbitRequests.set(requestId, { resolve, reject });
+      this.orbitWorker.postMessage({ requestId, payload });
+    }).catch((err) => {
+      console.warn("[orbit worker] falling back to main thread computation", err);
+      return this.#computeOrbitSync(map, w, h, maxIter, options);
+    });
+  }
+
+  #computeOrbitSync(map, w, h, maxIter, options) {
+    switch (options.fn.id) {
+      case FN_MANDELBROT:
+        return Orbit.searchForMandelbrot(map, w, h, maxIter);
+      case FN_JULIA:
+        return Orbit.searchForJulia(map, w, h, maxIter, options.fn.param0);
+      default:
+        return undefined;
+    }
+  }
+
   resize(width, height) {
-    this.offscreenCanvas.width = width;
-    this.offscreenCanvas.height = height;
+    this.canvas.width = width;
+    this.canvas.height = height;
+    if (this.gpuContext && this.canvasFormat) {
+      this.gpuContext.configure({
+        device: this.gpuDevice,
+        format: this.canvasFormat,
+        alphaMode: "premultiplied",
+      });
+    }
   }
 
   async #createShaderModule(code) {
@@ -168,18 +252,18 @@ export class WebgpuRenderer extends Renderer {
   }
 
   detach() {
-    document.removeChild(this.offscreenCanvas);
+    if (this.orbitWorker) {
+      this.orbitWorker.terminate();
+      this.orbitWorker = undefined;
+      this.pendingOrbitRequests.clear();
+    }
   }
 
   async render(map, options) {
     const maxIter = Math.min(options.maxIter, MAX_ITERATIONS);
 
-    // ------------------------------------
-    // 2. Configure our offscreen canvas
-    // ------------------------------------
-    const pixelScale = Math.min(options.pixelDensity, 1);
-    const w = Math.ceil(this.canvas.width * pixelScale);
-    const h = Math.ceil(this.canvas.height * pixelScale);
+    const w = this.canvas.width;
+    const h = this.canvas.height;
 
     // Global pixel->complex scale
     const globalScale = (4 / w) * Math.pow(2, -map.zoom);
@@ -196,14 +280,7 @@ export class WebgpuRenderer extends Renderer {
     // ------------------------------------
     let orbit = undefined;
     if (options.deep) {
-      switch (options.fn.id) {
-        case FN_MANDELBROT:
-          orbit = Orbit.searchForMandelbrot(map, w, h, maxIter);
-          break;
-        case FN_JULIA:
-          orbit = Orbit.searchForJulia(map, w, h, maxIter, options.fn.param0);
-          break;
-      }
+      orbit = await this.#computeOrbit(map, w, h, maxIter, options);
     }
     const samples = Math.floor(Math.max(options.pixelDensity, 1));
 
@@ -240,10 +317,8 @@ export class WebgpuRenderer extends Renderer {
 
     this.#resetIterationCounter();
 
-    // Acquire a texture to render into (offscreen)
-    const renderView = this.offscreenGpuContext
-      .getCurrentTexture()
-      .createView();
+    // Acquire a texture to render into
+    const renderView = this.gpuContext.getCurrentTexture().createView();
 
     // Build the command pass
     const commandEncoder = this.gpuDevice.createCommandEncoder();
@@ -268,29 +343,10 @@ export class WebgpuRenderer extends Renderer {
     const gpuCommands = commandEncoder.finish();
     this.gpuDevice.queue.submit([gpuCommands]);
 
-    // ------------------------------------
-    // 4. Blit from offscreen -> main canvas
-    // ------------------------------------
-    // Use the main canvas's 2D context to draw the offscreen image:
-    // If you want a simple "centered" or "fit" approach, you can do:
-    this.ctx.drawImage(
-      this.offscreenCanvas,
-      0,
-      0,
-      w,
-      h,
-      0,
-      0,
-      this.canvas.width,
-      this.canvas.height
-    );
+    // Don't await GPU completion here; let the main loop stay smooth.
+    this.gpuDevice.queue.onSubmittedWorkDone().catch(() => {});
 
-    await this.gpuDevice.queue.onSubmittedWorkDone();
-
-    const iterations = await this.#readIterations();
-    const flops = iterations * FLOP_PER_ITER;
-
-    return new RenderResults(this.id(), options, flops);
+    return new RenderResults(this.id(), options, null);
   }
 
   #resetIterationCounter() {

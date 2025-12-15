@@ -178,15 +178,15 @@ function updatePalette() {
   const palette = appState.palette ?? Palette.WIKIPEDIA;
   juliaExplorer.mandelExplorer.options.palette = palette;
   juliaExplorer.juliaExplorer.options.palette = palette;
-  juliaExplorer.mandelExplorer.render();
-  juliaExplorer.juliaExplorer.render();
+  juliaExplorer.mandelExplorer.render(true);
+  juliaExplorer.juliaExplorer.render(true);
 }
 
 function updateMaxIter() {
   juliaExplorer.mandelExplorer.options.maxIter = appState.maxIter;
   juliaExplorer.juliaExplorer.options.maxIter = appState.maxIter;
-  juliaExplorer.mandelExplorer.render();
-  juliaExplorer.juliaExplorer.render();
+  juliaExplorer.mandelExplorer.render(true);
+  juliaExplorer.juliaExplorer.render(true);
 }
 
 function updatePixelDensity() {
@@ -194,12 +194,12 @@ function updatePixelDensity() {
     juliaExplorer.juliaExplorer.options.pixelDensity = appState.pixelDensity;
     juliaExplorer.juliaExplorer.dynamicPixelDensity =
       appState.pixelDensity ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
-    juliaExplorer.juliaExplorer.render();
+    juliaExplorer.juliaExplorer.render(true);
   } else {
     juliaExplorer.mandelExplorer.options.pixelDensity = appState.pixelDensity;
     juliaExplorer.mandelExplorer.dynamicPixelDensity =
       appState.pixelDensity ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
-    juliaExplorer.mandelExplorer.render();
+    juliaExplorer.mandelExplorer.render(true);
   }
 }
 

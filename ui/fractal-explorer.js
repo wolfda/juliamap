@@ -6,12 +6,14 @@ import { RenderingEngine, RenderOptions } from "../renderers/renderer.js";
 import { createRenderer } from "../renderers/renderers.js";
 
 export const DPR = window.devicePixelRatio ?? 1;
-const RENDER_INTERVAL_MS = 80; // ~12 fps preview
+const RENDER_INTERVAL_MS = 33; // target ~30 fps preview
 const FPS_WINDOW_MS = 1000; // Aggregate FPS
-const TARGET_FPS = 30;
-const TARGET_DELAY = 1000 / TARGET_FPS;
+const TARGET_FRAME_MS = 33; // ~30 fps budget
 const MIN_PIXEL_DENSITY = 0.125;
 const MAX_PIXEL_DENSITY = 1;
+const INTERACTIVE_ITER_CAP = 2000;
+const INTERACTIVE_PIXEL_DENSITY = 0.5;
+const INTERACTION_LINGER_MS = 120;
 
 export class FractalExplorer {
   constructor(
@@ -33,6 +35,22 @@ export class FractalExplorer {
     this.renderer = null;
     this.dynamicPixelDensity = MAX_PIXEL_DENSITY;
 
+    // Back buffer for rendering; front buffer is `this.canvas`
+    this.renderCanvas = document.createElement("canvas");
+    this.renderCtx = null;
+    this.latestFrameCanvas = document.createElement("canvas");
+    this.latestFrameCtx = this.latestFrameCanvas.getContext("2d");
+    this.lastRenderState = null;
+    this.pendingRenderQueue = [];
+    this.renderLoopPromise = null;
+    this.inFlightRenderPromise = null;
+    this.inFlightRenderStartTime = null;
+    this.nextRequestId = 1;
+    this.lastEnqueueTime = 0;
+    this.pendingViewportChange = null;
+    this.viewportQueueBusy = false;
+    this.previewLoopId = null;
+
     // Mouse & touch state
     this.isDragging = false;
     this.lastMousePos = { x: 0, y: 0 };
@@ -40,10 +58,10 @@ export class FractalExplorer {
     this.initialZoom = 0;
     this.lastTouchEndTime = 0;
 
-    // Debounce/timer for final hi-res render
-    this.renderTimeoutId = null;
     this.lastRenderTime = 0;
     this.zoomAnimationId = null;
+    this.interactionActive = false;
+    this.interactionTimeoutId = null;
 
     this.onMouseDownHandler = this.#onMouseDown.bind(this);
     this.onMouseMoveHandler = this.#onMouseMove.bind(this);
@@ -58,22 +76,47 @@ export class FractalExplorer {
     this.fpsMonitor = new FpsMonitor(FPS_WINDOW_MS);
 
     this.canvas = document.createElement("canvas");
-    this.ctx = this.canvas.getContext("2d");
+    this.ctx = null;
+    this.canvas.style.imageRendering = "pixelated";
+    this.latestFrameCtx.imageSmoothingEnabled = false;
+    this.latestFrameCtx.imageSmoothingQuality = "low";
+    this.latestFrameCanvas.style.imageRendering = "pixelated";
+
+    this.#startPreviewLoop();
   }
 
   async initRenderer() {
+    if (this.renderingEngine === RenderingEngine.WEBGPU) {
+      // Render straight to the visible canvas; no 2D context needed.
+      this.renderCanvas = this.canvas;
+      this.renderCtx = null;
+    } else {
+      this.renderCtx = this.renderCanvas.getContext("2d");
+      this.renderCtx.imageSmoothingEnabled = false;
+      this.renderCtx.imageSmoothingQuality = "low";
+      this.renderCanvas.style.imageRendering = "pixelated";
+    }
+
     this.renderer = await createRenderer(
-      this.canvas,
-      this.ctx,
+      this.renderCanvas,
+      this.renderCtx,
       this.map,
       this.renderingEngine
     );
+
+    if (this.renderer.id() !== RenderingEngine.WEBGPU) {
+      this.ctx = this.canvas.getContext("2d");
+      this.ctx.imageSmoothingEnabled = false;
+      this.ctx.imageSmoothingQuality = "low";
+    } else {
+      this.ctx = null;
+    }
+
     this.dynamicPixelDensity =
       this.options.pixelDensity ??
       (this.renderer.id() === RenderingEngine.CPU
         ? MIN_PIXEL_DENSITY
         : MAX_PIXEL_DENSITY);
-    setInterval(this.adjustPixelDensity.bind(this), FPS_WINDOW_MS);
   }
 
   #onMouseDown(e) {
@@ -95,27 +138,25 @@ export class FractalExplorer {
       return;
     }
 
-    // Convert oldPos and newPos from screen → fractal coords
-    const oldPos = this.#canvasToComplex(
-      this.lastMousePos.x,
-      this.lastMousePos.y
-    );
-    const newPos = this.#canvasToComplex(e.clientX, e.clientY);
+    const nextPos = { x: e.clientX, y: e.clientY };
+    this.#queueViewportChange(async () => {
+      this.#markInteraction();
+      const oldPos = this.#canvasToComplex(
+        this.lastMousePos.x,
+        this.lastMousePos.y
+      );
+      const newPos = this.#canvasToComplex(nextPos.x, nextPos.y);
+      this.map.move(oldPos.sub(newPos));
+      this.lastMousePos = nextPos;
 
-    // Move the map by the delta
-    this.map.move(oldPos.sub(newPos));
-
-    this.lastMousePos = { x: e.clientX, y: e.clientY };
-
-    // Possibly do a real-time quick fractal render
-    const now = performance.now();
-    if (now - this.lastRenderTime > RENDER_INTERVAL_MS) {
-      this.render();
-      this.lastRenderTime = now;
-    }
-
-    this.onMapChanged?.();
-    this.onDragged?.();
+      const now = performance.now();
+      if (now - this.lastRenderTime > RENDER_INTERVAL_MS) {
+        this.render();
+        this.lastRenderTime = now;
+      }
+      this.onMapChanged?.();
+      this.onDragged?.();
+    });
   }
 
   #onMouseUp() {
@@ -129,6 +170,7 @@ export class FractalExplorer {
   }
 
   #zoomAt(screenX, screenY, newZoom) {
+    this.#markInteraction();
     const pivot = this.#canvasToComplex(screenX, screenY);
     this.map.zoomTo(newZoom);
     const newPivot = this.#canvasToComplex(screenX, screenY);
@@ -150,7 +192,10 @@ export class FractalExplorer {
   #onWheel(e) {
     e.preventDefault();
     this.map.stop();
-    this.#zoomAt(e.offsetX, e.offsetY, this.map.zoom - e.deltaY * 0.002);
+    this.#queueViewportChange(async () => {
+      await this.#waitForRenderBudget();
+      this.#zoomAt(e.offsetX, e.offsetY, this.map.zoom - e.deltaY * 0.002);
+    });
   }
 
   #touchPos(touch) {
@@ -180,6 +225,7 @@ export class FractalExplorer {
   #onTouchStart(e) {
     e.preventDefault();
     this.map.stop(); // kill inertia if we have a new touch
+    this.#markInteraction();
     const activeTouches = Array.from(e.touches);
 
     if (activeTouches.length === 1) {
@@ -215,20 +261,20 @@ export class FractalExplorer {
       if (!this.isDragging) {
         return;
       }
-
-      const oldPos = this.#canvasToComplex(
-        this.lastMousePos.x,
-        this.lastMousePos.y
-      );
-      const newPos = this.#canvasToComplex(touch.clientX, touch.clientY);
-
-      this.map.move(oldPos.sub(newPos));
-
-      this.lastMousePos = { x: touch.clientX, y: touch.clientY };
-
-      this.render();
-      this.onMapChanged?.();
-      this.onDragged?.();
+      const nextPos = { x: touch.clientX, y: touch.clientY };
+      this.#queueViewportChange(async () => {
+        this.#markInteraction();
+        const oldPos = this.#canvasToComplex(
+          this.lastMousePos.x,
+          this.lastMousePos.y
+        );
+        const newPos = this.#canvasToComplex(nextPos.x, nextPos.y);
+        this.map.move(oldPos.sub(newPos));
+        this.lastMousePos = nextPos;
+        this.render();
+        this.onMapChanged?.();
+        this.onDragged?.();
+      });
     } else if (activeTouches.length === 2) {
       // Pinch to zoom
       const dist = getDistance(activeTouches[0], activeTouches[1]);
@@ -236,15 +282,24 @@ export class FractalExplorer {
       const mid = this.#touchPos(activeTouches[0])
         .add(this.#touchPos(activeTouches[1]))
         .divScalar(2);
-      this.#zoomAt(mid.x, mid.y, this.initialZoom + dzoom);
+      this.#queueViewportChange(async () => {
+        await this.#waitForRenderBudget();
+        this.#markInteraction();
+        this.#zoomAt(mid.x, mid.y, this.initialZoom + dzoom);
+      });
     }
   }
 
   #onTouchEnd(e) {
     e.preventDefault();
+    this.#markInteraction();
+    this.#markInteraction();
     const now = performance.now();
     if (now - this.lastTouchEndTime < 300) {
-      this.#onDoubleClick(e);
+      this.#queueViewportChange(async () => {
+        await this.#waitForRenderBudget();
+        this.#onDoubleClick(e);
+      });
     } else {
       const activeTouches = Array.from(e.touches);
       if (activeTouches.length === 0) {
@@ -288,7 +343,7 @@ export class FractalExplorer {
       return;
     }
     this.divContainer.appendChild(this.canvas);
-    this.render();
+    this.render(true);
     this.isAttached = true;
   }
 
@@ -325,9 +380,13 @@ export class FractalExplorer {
   async resize(width, height) {
     this.canvas.width = width * DPR;
     this.canvas.height = height * DPR;
+    this.renderCanvas.width = width * DPR;
+    this.renderCanvas.height = height * DPR;
+    this.latestFrameCanvas.width = width * DPR;
+    this.latestFrameCanvas.height = height * DPR;
     if (this.renderer) {
       this.renderer.resize(width * DPR, height * DPR);
-      await this.render();
+      await this.render(true);
     }
   }
 
@@ -336,60 +395,218 @@ export class FractalExplorer {
   }
 
   /**
-   * Render a quick preview, then schedule a final CPU render.
+   * Render a quick preview by stretching the last frame; always queue a new render
+   * so we refresh as quickly as possible during interaction.
    */
-  async render() {
+  async render(force = false) {
     if (!this.isAttached) {
       return;
     }
-    const pixelDensity = this.options.pixelDensity ?? this.dynamicPixelDensity;
-    const restPixelDensity =
-      this.options.pixelDensity ??
-      (this.renderer.id() === RenderingEngine.WEBGPU ? 8 : 1);
-    const maxIter = this.options.maxIter ?? this.#getDefaultIter();
+    const pixelDensity = this.options.pixelDensity ?? MAX_PIXEL_DENSITY;
+    let maxIter = this.options.maxIter ?? this.#getDefaultIter();
     const deep = this.options.deep ?? this.map.zoom > 16;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const fn = this.options.fn ?? DEFAULT_FN;
-    const options = { pixelDensity, deep, maxIter, palette, fn };
-
-    const start = performance.now();
-    const renderResult = await this.renderer.render(
-      this.map,
-      new RenderOptions(options)
+    const interactivePixelDensity = Math.max(
+      MIN_PIXEL_DENSITY,
+      pixelDensity * INTERACTIVE_PIXEL_DENSITY
     );
-    const end = performance.now();
+    const options = {
+      pixelDensity: this.interactionActive ? interactivePixelDensity : pixelDensity,
+      deep,
+      maxIter: this.interactionActive ? Math.min(maxIter, INTERACTIVE_ITER_CAP) : maxIter,
+      palette,
+      fn,
+    };
 
-    this.onRendered?.(renderResult);
-    this.fpsMonitor.addFrame(end - start);
+    this.dynamicPixelDensity = pixelDensity;
 
-    clearTimeout(this.renderTimeoutId);
-    if (pixelDensity !== restPixelDensity) {
-      this.renderTimeoutId = setTimeout(async () => {
-        const renderResult = await this.renderer.render(
-          this.map,
-          new RenderOptions({ ...options, pixelDensity: restPixelDensity })
-        );
-        this.onRendered?.(renderResult);
-      }, 300);
+    const hasFrame = !!this.lastRenderState;
+    // Always enqueue the latest view; drop any older pending request.
+    this.#enqueueRender(options);
+    if (hasFrame && !force) {
+      this.#drawPreviewFromLastRender();
+    }
+    return this.renderLoopPromise;
+  }
+
+  #enqueueRender(options) {
+    const requestId = this.nextRequestId++;
+    let resolvePromise;
+    const promise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+    // Keep only the latest pending render request to avoid wasteful backlog.
+    this.pendingRenderQueue = [];
+    this.pendingRenderQueue.push({
+      requestId,
+      options: new RenderOptions(options),
+      resolve: resolvePromise,
+    });
+    this.lastEnqueueTime = performance.now();
+
+    if (!this.renderLoopPromise) {
+      this.renderLoopPromise = this.#processRenderQueue().finally(() => {
+        this.renderLoopPromise = null;
+      });
+    }
+    return { requestId, promise };
+  }
+
+  async #processRenderQueue() {
+    // Run renders sequentially; every enqueued request is rendered in order.
+    while (this.pendingRenderQueue.length > 0 && this.isAttached) {
+      const { requestId, options, resolve } = this.pendingRenderQueue.shift();
+      const renderState = this.#snapshotMapState();
+
+      const start = performance.now();
+      this.inFlightRenderStartTime = start;
+      this.inFlightRenderPromise = this.renderer.render(this.map, options);
+      const renderResult = await this.inFlightRenderPromise;
+      this.inFlightRenderPromise = null;
+      this.inFlightRenderStartTime = null;
+      const end = performance.now();
+      const renderDuration = Math.round(end - start);
+
+      // Present every finished frame; reprojection keeps it aligned with the
+      // current view even if newer requests were queued while it was rendering.
+      this.lastRenderState = renderState;
+      this.#captureLatestFrame();
+      this.#presentFrame();
+      this.onRendered?.(renderResult);
+
+      this.fpsMonitor.addFrame(end - start);
+      resolve?.(renderResult);
     }
   }
 
-  adjustPixelDensity() {
-    const delay = this.fpsMonitor.delay();
-    if (delay === null) {
+  #snapshotMapState() {
+    // Capture center/zoom/plane used for the current render, so we can
+    // reproject the last frame while a new render is pending.
+    return {
+      center: this.map.center.clone(),
+      plane: this.map.plane,
+      zoom: this.map.zoom,
+    };
+  }
+
+  #captureLatestFrame() {
+    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
       return;
     }
-    const error = TARGET_DELAY - delay;
-    const adjustmentRate = 0.1;
-
-    // Proportional control: small error => small change
-    this.dynamicPixelDensity *= 1 + (adjustmentRate * error) / TARGET_DELAY;
-
-    // Clamp to avoid crazy values
-    this.dynamicPixelDensity = Math.min(
-      Math.max(this.dynamicPixelDensity, MIN_PIXEL_DENSITY),
-      MAX_PIXEL_DENSITY
+    if (
+      this.latestFrameCanvas.width !== this.renderCanvas.width ||
+      this.latestFrameCanvas.height !== this.renderCanvas.height
+    ) {
+      this.latestFrameCanvas.width = this.renderCanvas.width;
+      this.latestFrameCanvas.height = this.renderCanvas.height;
+    }
+    this.latestFrameCtx.imageSmoothingEnabled = false;
+    this.latestFrameCtx.drawImage(
+      this.renderCanvas,
+      0,
+      0,
+      this.renderCanvas.width,
+      this.renderCanvas.height,
+      0,
+      0,
+      this.latestFrameCanvas.width,
+      this.latestFrameCanvas.height
     );
+  }
+
+  #waitForRenderBudget() {
+    // Keep interaction fully smooth: never block on in-flight renders.
+    return Promise.resolve(!!this.inFlightRenderPromise);
+  }
+
+  #queueViewportChange(fn) {
+    this.pendingViewportChange = fn;
+    if (this.viewportQueueBusy) {
+      return;
+    }
+    this.viewportQueueBusy = true;
+    const run = async () => {
+      while (this.pendingViewportChange) {
+        const work = this.pendingViewportChange;
+        this.pendingViewportChange = null;
+        await this.#waitForRenderBudget();
+        await work();
+      }
+      this.viewportQueueBusy = false;
+    };
+    run();
+  }
+
+  #presentFrame() {
+    // Reproject the freshly rendered frame onto the current viewport so
+    // completed renders never "snap back" to the zoom/center they started with.
+    this.#drawPreviewFromLastRender();
+    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
+      this.canvas.style.transformOrigin = "0 0";
+      this.canvas.style.transform = "translate(0px, 0px) scale(1)";
+    }
+  }
+
+  #startPreviewLoop() {
+    const tick = () => {
+      if (this.isAttached && this.lastRenderState) {
+        this.#drawPreviewFromLastRender();
+      }
+      this.previewLoopId = requestAnimationFrame(tick);
+    };
+    this.previewLoopId = requestAnimationFrame(tick);
+  }
+
+  #drawPreviewFromLastRender() {
+    if (!this.lastRenderState) {
+      return;
+    }
+
+    const currentPlane = this.map.plane;
+    const lastCenter = currentPlane.complex().project(this.lastRenderState.center);
+    const currentCenter = currentPlane.complex().project(this.map.center);
+    const dx = currentPlane.asNumber(lastCenter.x - currentCenter.x);
+    const dy = currentPlane.asNumber(lastCenter.y - currentCenter.y);
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    const zoomDelta = this.map.zoom - this.lastRenderState.zoom;
+    const scale = Math.pow(2, zoomDelta);
+    const pixelScale = (w / 4) * Math.pow(2, this.map.zoom);
+    const targetX = w * 0.5 + dx * pixelScale;
+    const targetY = h * 0.5 - dy * pixelScale;
+    const tx = targetX - scale * w * 0.5;
+    const ty = targetY - scale * h * 0.5;
+
+    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
+      // For WebGPU we can't repaint via 2D; use a CSS transform to preview.
+      this.canvas.style.transformOrigin = "0 0";
+      const cssTx = tx / DPR;
+      const cssTy = ty / DPR;
+      this.canvas.style.transform = `translate(${cssTx}px, ${cssTy}px) scale(${scale})`;
+      return;
+    }
+
+    const sourceCanvas =
+      this.latestFrameCanvas.width > 0 ? this.latestFrameCanvas : this.renderCanvas;
+
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, w, h);
+    this.ctx.setTransform(scale, 0, 0, scale, tx, ty);
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.drawImage(
+      sourceCanvas,
+      0,
+      0,
+      sourceCanvas.width,
+      sourceCanvas.height,
+      0,
+      0,
+      w,
+      h
+    );
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   #canvasToComplex(sx, sy) {
@@ -399,6 +616,16 @@ export class FractalExplorer {
       this.canvas.width,
       this.canvas.height
     );
+  }
+
+  #markInteraction() {
+    this.interactionActive = true;
+    if (this.interactionTimeoutId) {
+      clearTimeout(this.interactionTimeoutId);
+    }
+    this.interactionTimeoutId = setTimeout(() => {
+      this.interactionActive = false;
+    }, INTERACTION_LINGER_MS);
   }
 
   /**
