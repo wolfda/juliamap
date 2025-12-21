@@ -124,7 +124,6 @@ export class Webgl1Renderer extends Renderer {
   render(map, options) {
     const gl = this.gl;
 
-    // const scale = Math.min(options.pixelDensity, 1);
     const scale = 0.5;
     const w = Math.ceil(this.canvas.width * scale);
     const h = Math.ceil(this.canvas.height * scale);
@@ -135,7 +134,10 @@ export class Webgl1Renderer extends Renderer {
     gl.useProgram(this.webGLProgram);
     gl.uniform2f(this.uResolution, w, h);
     gl.uniform1i(this.uMaxIter, options.maxIter);
-    const samples = Math.floor(Math.max(options.pixelDensity, 1));
+    const samples = Math.min(
+      Math.floor(Math.max(options.maxSuperSamples ?? 1, 1)),
+      64
+    );
     gl.uniform1i(this.uSamples, samples);
     gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
     gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
@@ -482,8 +484,8 @@ vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
 
 vec3 renderSuperSample(vec2 sampleCoord, vec2 scaleFactor, int samples) {
     vec3 color = vec3(0.0);
-    // Loop up to a fixed maximum (e.g., 16) samples for supersampling.
-    for (int i = 0; i < 16; i++) {
+    // Loop up to a fixed maximum (e.g., 64) samples for supersampling.
+    for (int i = 0; i < 64; i++) {
         if (i >= samples) {
             break;
         }

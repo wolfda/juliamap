@@ -18,7 +18,7 @@ export const StateAttributes = {
   RENDERING_ENGINE: "renderingEngine",
   PALETTE: "palette",
   MAX_ITER: "maxIter",
-  PIXEL_DENSITY: "pixelDensity",
+  MAX_SUPER_SAMPLES: "maxSuperSamples",
 };
 
 
@@ -43,7 +43,7 @@ export class AppState extends EventTarget {
       palette = null;
     }
     const maxIter = int(params, "iter", null);
-    const pixelDensity = float(params, "pd", null);
+    const maxSuperSamples = int(params, "ss", 8);
     return new AppState({
       mcenter,
       mzoom,
@@ -53,7 +53,7 @@ export class AppState extends EventTarget {
       renderingEngine,
       palette,
       maxIter,
-      pixelDensity,
+      maxSuperSamples,
       deep,
     });
   }
@@ -67,7 +67,7 @@ export class AppState extends EventTarget {
     renderingEngine,
     palette,
     maxIter,
-    pixelDensity,
+    maxSuperSamples,
     deep,
   }) {
     super();
@@ -85,8 +85,7 @@ export class AppState extends EventTarget {
     this.deep = deep;
     this.palette = palette;
     this.maxIter = maxIter;
-    this.pixelDensity = pixelDensity;
-    this.dynamicPixelDensity = null;
+    this.maxSuperSamples = maxSuperSamples;
 
     this.updateURLTimeoutId = null;
   }
@@ -128,17 +127,10 @@ export class AppState extends EventTarget {
     }
   }
 
-  setPixelDensity(pixelDensity) {
-    if (this.pixelDensity !== pixelDensity) {
-      this.pixelDensity = pixelDensity;
-      this.#triggerChange(StateAttributes.PIXEL_DENSITY);
-    }
-  }
-
-  setDynamicPixelDensity(dynamicPixelDensity) {
-    if (this.dynamicPixelDensity !== dynamicPixelDensity) {
-      this.dynamicPixelDensity = dynamicPixelDensity;
-      this.#triggerChange(StateAttributes.PIXEL_DENSITY);
+  setMaxSuperSamples(maxSuperSamples) {
+    if (this.maxSuperSamples !== maxSuperSamples) {
+      this.maxSuperSamples = maxSuperSamples;
+      this.#triggerChange(StateAttributes.MAX_SUPER_SAMPLES);
     }
   }
 
@@ -195,10 +187,10 @@ export class AppState extends EventTarget {
       } else {
         params.delete("iter");
       }
-      if (this.pixelDensity !== null) {
-        params.set("pd", this.pixelDensity);
+      if (this.maxSuperSamples !== null) {
+        params.set("ss", this.maxSuperSamples);
       } else {
-        params.delete("pd");
+        params.delete("ss");
       }
       if (this.palette && this.palette !== Palette.WIKIPEDIA) {
         params.set("palette", this.palette);
@@ -235,10 +227,6 @@ function renderXYZ(center, zoom) {
 
 function int(params, key, def) {
   return params.has(key) ? parseInt(params.get(key)) ?? def : def;
-}
-
-function float(params, key, def) {
-  return params.has(key) ? parseFloat(params.get(key)) ?? def : def;
 }
 
 export const appState = AppState.parseFromAddressBar();

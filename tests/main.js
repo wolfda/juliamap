@@ -54,7 +54,7 @@ async function testRenderer(renderingEngine, deep) {
       renderingEngine
     );
     const options = new RenderOptions({
-      pixelDensity: 1,
+      maxSuperSamples: 4,
       deep: deep,
       maxIter: 500,
       palette: Palette.ELECTRIC,

@@ -8,6 +8,9 @@ const PALETTES = [
   Palette.RAINBOW,
   Palette.ZEBRA,
 ];
+const MIN_SUPER_SAMPLES = 1;
+const DEFAULT_SUPER_SAMPLES = 8;
+const MAX_SUPER_SAMPLES = 64;
 
 class RendererConfig {
   constructor(renderer, deep) {
@@ -32,7 +35,6 @@ export class AppStateEditor {
     this.iterAuto = document.getElementById("iterAuto");
     this.iterRange = document.getElementById("iterRange");
     this.iterValue = document.getElementById("iterValue");
-    this.pixelDensityAuto = document.getElementById("pixelDensityAuto");
     this.rendererConfigs = {};
     this.#getRenderingConfigs(supportedRenderers).forEach((config) => {
       this.rendererConfigs[config.name()] = config;
@@ -48,8 +50,8 @@ export class AppStateEditor {
       this.paletteSelect.appendChild(opt);
     });
 
-    this.pixelDensityRange = document.getElementById("pixelDensityRange");
-    this.pixelDensityValue = document.getElementById("pixelDensityValue");
+    this.maxSuperSamplesRange = document.getElementById("maxSuperSamplesRange");
+    this.maxSuperSamplesValue = document.getElementById("maxSuperSamplesValue");
 
     this.layoutSelect = document.getElementById("layoutSelect");
 
@@ -80,15 +82,8 @@ export class AppStateEditor {
       this.#refresh();
     });
 
-    this.pixelDensityAuto.addEventListener("change", () => {
-      appState.setPixelDensity(
-        this.pixelDensityAuto.checked ? null : this.getPixelDensity()
-      );
-      this.#refresh();
-    });
-
-    this.pixelDensityRange.addEventListener("input", () => {
-      appState.setPixelDensity(this.getPixelDensity());
+    this.maxSuperSamplesRange.addEventListener("input", () => {
+      appState.setMaxSuperSamples(this.getMaxSuperSamples());
       this.#refresh();
     });
 
@@ -98,8 +93,8 @@ export class AppStateEditor {
 
     appState.addEventListener("change", this.#onAppStateChanged.bind(this));
 
-    this.pixelDensityRange.min = Math.log2(1 / 8);
-    this.pixelDensityRange.max = Math.log2(8);
+    this.maxSuperSamplesRange.min = MIN_SUPER_SAMPLES;
+    this.maxSuperSamplesRange.max = MAX_SUPER_SAMPLES;
 
     this.rendererSelect.value = new RendererConfig(
       appState.renderingEngine,
@@ -107,7 +102,6 @@ export class AppStateEditor {
     ).name();
     this.paletteSelect.value = appState.palette ?? Palette.WIKIPEDIA;
     this.iterAuto.checked = appState.maxIter === null;
-    this.pixelDensityAuto.checked = appState.pixelDensity === null;
     this.#refresh();
   }
 
@@ -132,20 +126,14 @@ export class AppStateEditor {
       this.iterRange.value = appState.getDefaultMaxIter();
     }
     this.iterValue.textContent = this.iterRange.value;
-    this.pixelDensityRange.disabled = this.pixelDensityAuto.checked;
-    if (this.pixelDensityAuto.checked) {
-      this.setPixelDensity(appState.dynamicPixelDensity);
-    }
-    this.pixelDensityValue.textContent = pixelDensityToString(
-      this.getPixelDensity()
+    this.setMaxSuperSamples(
+      appState.maxSuperSamples ?? DEFAULT_SUPER_SAMPLES
     );
+    this.maxSuperSamplesValue.textContent = this.getMaxSuperSamples();
   }
 
   #onAppStateChanged(event) {
-    if (
-      event.detail === StateAttributes.VIEWPORT &&
-      (this.iterAuto.checked || this.pixelDensityAuto.checked)
-    ) {
+    if (event.detail === StateAttributes.VIEWPORT && this.iterAuto.checked) {
       this.#refresh();
     } else if (event.detail === StateAttributes.LAYOUT) {
       this.layoutSelect.value = appState.layout;
@@ -156,24 +144,11 @@ export class AppStateEditor {
     return this.rendererConfigs[this.rendererSelect.value];
   }
 
-  getPixelDensity() {
-    return Math.pow(2, this.pixelDensityRange.value);
+  getMaxSuperSamples() {
+    return parseInt(this.maxSuperSamplesRange.value, 10);
   }
 
-  setPixelDensity(pixelDensity) {
-    this.pixelDensityRange.value = Math.log2(pixelDensity);
-  }
-}
-
-function pixelDensityToString(pixelDensity) {
-  switch (pixelDensity) {
-    case 0.125:
-      return "1/8";
-    case 0.25:
-      return "1/4";
-    case 0.5:
-      return "1/2";
-    default:
-      return pixelDensity;
+  setMaxSuperSamples(maxSuperSamples) {
+    this.maxSuperSamplesRange.value = maxSuperSamples;
   }
 }

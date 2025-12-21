@@ -25,8 +25,8 @@ export class Renderer {
 }
 
 export class RenderOptions {
-  constructor({ pixelDensity, deep, maxIter, palette, fn } = {}) {
-    this.pixelDensity = pixelDensity;
+  constructor({ maxSuperSamples, deep, maxIter, palette, fn } = {}) {
+    this.maxSuperSamples = maxSuperSamples;
     this.deep = deep;
     this.maxIter = maxIter;
     this.palette = palette;
@@ -41,4 +41,3 @@ export class RenderResults {
     this.flops = flops;
   }
 }
-

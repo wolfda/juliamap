@@ -9,10 +9,11 @@ export const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 33; // target ~30 fps preview
 const FPS_WINDOW_MS = 1000; // Aggregate FPS
 const TARGET_FRAME_MS = 33; // ~30 fps budget
-const MIN_PIXEL_DENSITY = 0.125;
-const MAX_PIXEL_DENSITY = 1;
+const MIN_SUPER_SAMPLES = 1;
+const DEFAULT_SUPER_SAMPLES = 8;
+const MAX_SUPER_SAMPLES = 64;
 const INTERACTIVE_ITER_CAP = 2000;
-const INTERACTIVE_PIXEL_DENSITY = 0.5;
+const INTERACTIVE_SUPER_SAMPLES_FACTOR = 0.5;
 const INTERACTION_LINGER_MS = 120;
 
 export class FractalExplorer {
@@ -33,8 +34,6 @@ export class FractalExplorer {
 
     this.map = new MapControl();
     this.renderer = null;
-    this.dynamicPixelDensity = MAX_PIXEL_DENSITY;
-
     // Back buffer for rendering; front buffer is `this.canvas`
     this.renderCanvas = document.createElement("canvas");
     this.renderCtx = null;
@@ -112,11 +111,11 @@ export class FractalExplorer {
       this.ctx = null;
     }
 
-    this.dynamicPixelDensity =
-      this.options.pixelDensity ??
-      (this.renderer.id() === RenderingEngine.CPU
-        ? MIN_PIXEL_DENSITY
-        : MAX_PIXEL_DENSITY);
+    const fallbackMaxSamples =
+      this.renderer.id() === RenderingEngine.CPU
+        ? MIN_SUPER_SAMPLES
+        : DEFAULT_SUPER_SAMPLES;
+    this.options.maxSuperSamples ??= fallbackMaxSamples;
   }
 
   #onMouseDown(e) {
@@ -402,24 +401,24 @@ export class FractalExplorer {
     if (!this.isAttached) {
       return;
     }
-    const pixelDensity = this.options.pixelDensity ?? MAX_PIXEL_DENSITY;
+    const maxSuperSamples = this.options.maxSuperSamples ?? DEFAULT_SUPER_SAMPLES;
     let maxIter = this.options.maxIter ?? this.#getDefaultIter();
     const deep = this.options.deep ?? this.map.zoom > 16;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const fn = this.options.fn ?? DEFAULT_FN;
-    const interactivePixelDensity = Math.max(
-      MIN_PIXEL_DENSITY,
-      pixelDensity * INTERACTIVE_PIXEL_DENSITY
+    const interactiveMaxSuperSamples = Math.max(
+      MIN_SUPER_SAMPLES,
+      Math.round(maxSuperSamples * INTERACTIVE_SUPER_SAMPLES_FACTOR)
     );
     const options = {
-      pixelDensity: this.interactionActive ? interactivePixelDensity : pixelDensity,
+      maxSuperSamples: this.interactionActive
+        ? interactiveMaxSuperSamples
+        : maxSuperSamples,
       deep,
       maxIter: this.interactionActive ? Math.min(maxIter, INTERACTIVE_ITER_CAP) : maxIter,
       palette,
       fn,
     };
-
-    this.dynamicPixelDensity = pixelDensity;
 
     const hasFrame = !!this.lastRenderState;
     // Always enqueue the latest view; drop any older pending request.

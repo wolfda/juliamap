@@ -136,9 +136,8 @@ void main() {
 
   render(map, options) {
     const gl = this.gl;
-    const scale = Math.min(options.pixelDensity, 1);
-    const w = Math.ceil(this.canvas.width * scale);
-    const h = Math.ceil(this.canvas.height * scale);
+    const w = this.canvas.width;
+    const h = this.canvas.height;
 
     gl.viewport(0, 0, w, h);
 
@@ -146,7 +145,7 @@ void main() {
     gl.useProgram(this.webGLProgram);
     gl.uniform2f(this.uResolution, w, h);
     gl.uniform1i(this.uMaxIter, options.maxIter);
-    const samples = Math.floor(Math.max(options.pixelDensity, 1));
+    const samples = Math.floor(Math.max(options.maxSuperSamples ?? 1, 1));
     gl.uniform1i(this.uSamples, samples);
     gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
     gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);

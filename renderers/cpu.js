@@ -62,9 +62,9 @@ export class CpuRenderer extends Renderer {
   async #renderInternal({ center, zoom, options }) {
     this.terminateWorkers();
 
-    const scale = Math.min(options.pixelDensity, 1);
-    const w = Math.floor(this.canvas.width * scale);
-    const h = Math.floor(this.canvas.height * scale);
+    const scale = 1;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
 
     const finalImageData = this.offscreenCtx.createImageData(w, h);
     let finishedWorkers = 0;

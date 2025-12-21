@@ -27,7 +27,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       palette: appState.palette,
       maxIter: appState.maxIter,
       deep: appState.deep,
-      pixelDensity: appState.pixelDensity,
+      maxSuperSamples: appState.maxSuperSamples,
     }),
     layout: appState.layout ?? Layout.MANDEL,
     onChanged: onViewportChanged,
@@ -129,13 +129,6 @@ function onViewportChanged() {
 
 async function onAppStateChanged(event) {
   switch (event.detail) {
-    case StateAttributes.VIEWPORT:
-      const density =
-        juliaExplorer.layout === Layout.JULIA
-          ? juliaExplorer.juliaExplorer.dynamicPixelDensity
-          : juliaExplorer.mandelExplorer.dynamicPixelDensity;
-      appState.setDynamicPixelDensity(density);
-      break;
     case StateAttributes.RENDERING_ENGINE:
       await updateRenderer();
       break;
@@ -145,8 +138,8 @@ async function onAppStateChanged(event) {
     case StateAttributes.MAX_ITER:
       updateMaxIter();
       break;
-    case StateAttributes.PIXEL_DENSITY:
-      updatePixelDensity();
+    case StateAttributes.MAX_SUPER_SAMPLES:
+      updateMaxSuperSamples();
       break;
     case StateAttributes.LAYOUT:
       juliaExplorer.setLayout(appState.layout);
@@ -164,7 +157,7 @@ async function updateRenderer() {
       palette: appState.palette,
       maxIter: appState.maxIter,
       deep: appState.deep,
-      pixelDensity: appState.pixelDensity,
+      maxSuperSamples: appState.maxSuperSamples,
     }),
     onRendered: updateStats,
   });
@@ -189,16 +182,14 @@ function updateMaxIter() {
   juliaExplorer.juliaExplorer.render(true);
 }
 
-function updatePixelDensity() {
+function updateMaxSuperSamples() {
   if (juliaExplorer.layout === Layout.JULIA) {
-    juliaExplorer.juliaExplorer.options.pixelDensity = appState.pixelDensity;
-    juliaExplorer.juliaExplorer.dynamicPixelDensity =
-      appState.pixelDensity ?? juliaExplorer.juliaExplorer.dynamicPixelDensity;
+    juliaExplorer.juliaExplorer.options.maxSuperSamples =
+      appState.maxSuperSamples;
     juliaExplorer.juliaExplorer.render(true);
   } else {
-    juliaExplorer.mandelExplorer.options.pixelDensity = appState.pixelDensity;
-    juliaExplorer.mandelExplorer.dynamicPixelDensity =
-      appState.pixelDensity ?? juliaExplorer.mandelExplorer.dynamicPixelDensity;
+    juliaExplorer.mandelExplorer.options.maxSuperSamples =
+      appState.maxSuperSamples;
     juliaExplorer.mandelExplorer.render(true);
   }
 }

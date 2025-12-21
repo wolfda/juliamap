@@ -7,6 +7,10 @@ import { Renderer, RenderingEngine, RenderResults } from "./renderer.js";
 const MAX_ITERATIONS = 10000; // can increase for deeper zoom if desired
 const FLOP_PER_ITER = 9;
 
+const MIN_VARIANCE_SAMPLES = 4;
+const DEFAULT_MAX_SUPER_SAMPLES = 64;
+const SUPER_SAMPLE_VARIANCE = 0.0005;
+
 // Maximum (absolute) exponent we allow for the *local* pixel->complex scale
 // in base-2 log. This keeps u.scale comfortably inside f32's normal range.
 const MAX_LOCAL_EXPONENT = 80;
@@ -282,7 +286,10 @@ export class WebgpuRenderer extends Renderer {
     if (options.deep) {
       orbit = await this.#computeOrbit(map, w, h, maxIter, options);
     }
-    const samples = Math.floor(Math.max(options.pixelDensity, 1));
+    const maxSuperSamples = Math.max(
+      1,
+      Math.floor(options.maxSuperSamples ?? DEFAULT_MAX_SUPER_SAMPLES)
+    );
 
     // NOTE: now 56 bytes instead of 48
     const uniformArray = new ArrayBuffer(56);
@@ -297,7 +304,7 @@ export class WebgpuRenderer extends Renderer {
     dataView.setFloat32(16, w, true); // resolution
     dataView.setFloat32(20, h, true); // resolution
     dataView.setUint32(24, maxIter, true); // maxIter
-    dataView.setUint32(28, samples, true); // samples
+    dataView.setUint32(28, maxSuperSamples, true); // maxSuperSamples
     dataView.setUint32(32, getPaletteId(options.palette), true); // paletteId
     dataView.setUint32(36, options.fn.id, true); // functionId
     dataView.setFloat32(40, fnParam0.x, true); // param0
@@ -411,7 +418,7 @@ struct FractalUniforms {
     center         : vec2f,
     resolution     : vec2f,
     maxIter        : u32,
-    samples        : u32,
+    maxSamples     : u32,
     paletteId      : u32,
     functionId     : u32,
     param0         : vec2f,
@@ -432,6 +439,9 @@ var<storage, read> referenceOrbit: array<vec2f, ${MAX_ITERATIONS}>;
 
 @group(0) @binding(2)
 var<storage, read_write> iterationCounter: AtomicU64;
+
+const MIN_VARIANCE_SAMPLES: u32 = ${MIN_VARIANCE_SAMPLES}u;
+const SUPER_SAMPLE_VARIANCE: f32 = ${SUPER_SAMPLE_VARIANCE};
 
 // --- Math functions
 
@@ -665,15 +675,35 @@ fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
     return getColor(escapeVelocity);
 }
 
-fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f, samples: u32) -> vec3f {
-    var color = vec3f(0);
-    for (var i = 0u; i < samples; i += 1u) {
+fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
+    var mean = vec3f(0);
+    var m2 = vec3f(0);
+    var sampleCount: u32 = 0u;
+
+    for (var i = 0u; i < u.maxSamples; i += 1u) {
         // Add a random jitter in [-0.5, 0.5] to compute the value of the next sample.
         let jitter = vec2f(rand() - 0.5, rand() - 0.5);
-        color += renderOne(fragCoord + jitter, scaleFactor);
+        let sample = renderOne(fragCoord + jitter, scaleFactor);
+        sampleCount += 1u;
+
+        // Welford's algorithm for per-channel variance.
+        let delta = sample - mean;
+        mean += delta / f32(sampleCount);
+        let delta2 = sample - mean;
+        m2 += delta * delta2;
+
+        let minVarianceSamples = min(u.maxSamples, MIN_VARIANCE_SAMPLES);
+        if (sampleCount >= minVarianceSamples) {
+            let denom = max(f32(sampleCount - 1u), 1.0);
+            let variance = m2 / denom;
+            let maxVariance = max(variance.r, max(variance.g, variance.b));
+            if (maxVariance <= SUPER_SAMPLE_VARIANCE) {
+                break;
+            }
+        }
     }
 
-    return color / f32(samples);
+    return mean;
 }
 
 @fragment
@@ -681,10 +711,10 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     // Per-pixel scale in the complex plane (already rescaled on the CPU).
     let scaleFactor = u.scale * vec2f(1.0, -1.0);
 
-    if (u.samples == 1u) {
+    if (u.maxSamples == 1u) {
         return vec4f(renderOne(fragCoord.xy, scaleFactor), 1.0);
     } else {
-        return vec4f(renderSuperSample(fragCoord.xy, scaleFactor, u.samples), 1.0);
+        return vec4f(renderSuperSample(fragCoord.xy, scaleFactor), 1.0);
     }
 }
 `;

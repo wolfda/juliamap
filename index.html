@@ -78,12 +78,18 @@
         max="10000"
         class="full"
       />
-      <div>pixel density</div>
+      <div>max super samples</div>
       <div>
-        <label><input type="checkbox" id="pixelDensityAuto" /> auto</label>
-        <span id="pixelDensityValue"></span>
+        <span id="maxSuperSamplesValue"></span>
       </div>
-      <input type="range" id="pixelDensityRange" class="full" />
+      <input
+        type="range"
+        id="maxSuperSamplesRange"
+        min="1"
+        max="64"
+        step="1"
+        class="full"
+      />
       <div>layout</div>
       <select id="layoutSelect">
         <option value="mandel">mandelbrot</option>

@@ -150,6 +150,10 @@ body {
   width: 100%;
 }
 
+#controlPanel select {
+  width: 100%;
+}
+
 #github {
   position: absolute;
   right: 10px;
