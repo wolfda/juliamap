@@ -14,11 +14,9 @@ import { TestLogger } from "./test-logger.js";
 
 let logger = null;
 let testCanvas = null;
-let testCtx = null;
 
 window.addEventListener("DOMContentLoaded", async () => {
   testCanvas = document.getElementById("testCanvas");
-  testCtx = testCanvas.getContext("2d");
   logger = new TestLogger(document.getElementById("testOutput"));
 
   await testAll();
@@ -46,10 +44,19 @@ async function testRenderer(renderingEngine, deep) {
     return;
   }
   try {
+    const canvas = document.createElement("canvas");
+    const baseWidth = testCanvas?.width || testCanvas?.clientWidth || 300;
+    const baseHeight = testCanvas?.height || testCanvas?.clientHeight || 150;
+    canvas.width = baseWidth;
+    canvas.height = baseHeight;
+    const ctx =
+      renderingEngine === RenderingEngine.WEBGPU
+        ? null
+        : canvas.getContext("2d");
     const map = new MapControl();
     const renderer = await createRenderer(
-      testCanvas,
-      testCtx,
+      canvas,
+      ctx,
       map,
       renderingEngine
     );
