@@ -25,6 +25,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       appState.renderingEngine ?? (await getDefaultRenderingEngine()),
     options: new RenderOptions({
       palette: appState.palette,
+      paletteInterpolation: appState.paletteInterpolation,
       maxIter: appState.maxIter,
       deep: appState.deep,
       maxSuperSamples: appState.maxSuperSamples,
@@ -135,6 +136,9 @@ async function onAppStateChanged(event) {
     case StateAttributes.PALETTE:
       updatePalette();
       break;
+    case StateAttributes.PALETTE_INTERPOLATION:
+      updatePaletteInterpolation();
+      break;
     case StateAttributes.MAX_ITER:
       updateMaxIter();
       break;
@@ -155,6 +159,7 @@ async function updateRenderer() {
     renderingEngine: renderer,
     options: new RenderOptions({
       palette: appState.palette,
+      paletteInterpolation: appState.paletteInterpolation,
       maxIter: appState.maxIter,
       deep: appState.deep,
       maxSuperSamples: appState.maxSuperSamples,
@@ -175,6 +180,14 @@ function updatePalette() {
   juliaExplorer.juliaExplorer.render(true);
 }
 
+function updatePaletteInterpolation() {
+  juliaExplorer.mandelExplorer.options.paletteInterpolation =
+    appState.paletteInterpolation;
+  juliaExplorer.juliaExplorer.options.paletteInterpolation =
+    appState.paletteInterpolation;
+  juliaExplorer.mandelExplorer.render(true);
+  juliaExplorer.juliaExplorer.render(true);
+}
 function updateMaxIter() {
   juliaExplorer.mandelExplorer.options.maxIter = appState.maxIter;
   juliaExplorer.juliaExplorer.options.maxIter = appState.maxIter;

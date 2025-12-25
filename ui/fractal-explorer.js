@@ -405,6 +405,7 @@ export class FractalExplorer {
     let maxIter = this.options.maxIter ?? this.#getDefaultIter();
     const deep = this.options.deep ?? this.map.zoom > 16;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
+    const paletteInterpolation = this.options.paletteInterpolation;
     const fn = this.options.fn ?? DEFAULT_FN;
     const interactiveMaxSuperSamples = Math.max(
       MIN_SUPER_SAMPLES,
@@ -417,6 +418,7 @@ export class FractalExplorer {
       deep,
       maxIter: this.interactionActive ? Math.min(maxIter, INTERACTIVE_ITER_CAP) : maxIter,
       palette,
+      paletteInterpolation,
       fn,
     };
 

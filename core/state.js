@@ -1,5 +1,5 @@
 import { Complex, parseComplex, renderComplex } from "../math/complex.js";
-import { Palette } from "./palette.js";
+import { Palette, PaletteInterpolation } from "./palette.js";
 
 export const Layout = {
   SPLIT: "split",
@@ -11,12 +11,14 @@ const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
 const ZERO_CENTER = [new Complex(0, 0), 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
 const DEFAULT_PALETTE = Palette.WIKIPEDIA;
+const DEFAULT_PALETTE_INTERPOLATION = PaletteInterpolation.SPLINE;
 
 export const StateAttributes = {
   VIEWPORT: "viewport",
   LAYOUT: "layout",
   RENDERING_ENGINE: "renderingEngine",
   PALETTE: "palette",
+  PALETTE_INTERPOLATION: "paletteInterpolation",
   MAX_ITER: "maxIter",
   MAX_SUPER_SAMPLES: "maxSuperSamples",
 };
@@ -42,6 +44,10 @@ export class AppState extends EventTarget {
     if (palette === DEFAULT_PALETTE) {
       palette = null;
     }
+    let paletteInterpolation = params.get("interp");
+    if (paletteInterpolation === DEFAULT_PALETTE_INTERPOLATION) {
+      paletteInterpolation = null;
+    }
     const maxIter = int(params, "iter", null);
     const maxSuperSamples = int(params, "ss", 8);
     return new AppState({
@@ -52,6 +58,7 @@ export class AppState extends EventTarget {
       layout,
       renderingEngine,
       palette,
+      paletteInterpolation,
       maxIter,
       maxSuperSamples,
       deep,
@@ -66,6 +73,7 @@ export class AppState extends EventTarget {
     layout,
     renderingEngine,
     palette,
+    paletteInterpolation,
     maxIter,
     maxSuperSamples,
     deep,
@@ -84,6 +92,7 @@ export class AppState extends EventTarget {
     this.renderingEngine = renderingEngine;
     this.deep = deep;
     this.palette = palette;
+    this.paletteInterpolation = paletteInterpolation;
     this.maxIter = maxIter;
     this.maxSuperSamples = maxSuperSamples;
 
@@ -117,6 +126,13 @@ export class AppState extends EventTarget {
     if (this.palette !== palette) {
       this.palette = palette;
       this.#triggerChange(StateAttributes.PALETTE);
+    }
+  }
+
+  setPaletteInterpolation(paletteInterpolation) {
+    if (this.paletteInterpolation !== paletteInterpolation) {
+      this.paletteInterpolation = paletteInterpolation;
+      this.#triggerChange(StateAttributes.PALETTE_INTERPOLATION);
     }
   }
 
@@ -196,6 +212,14 @@ export class AppState extends EventTarget {
         params.set("palette", this.palette);
       } else {
         params.delete("palette");
+      }
+      if (
+        this.paletteInterpolation &&
+        this.paletteInterpolation !== DEFAULT_PALETTE_INTERPOLATION
+      ) {
+        params.set("interp", this.paletteInterpolation);
+      } else {
+        params.delete("interp");
       }
 
       const queryParams = params.toString();

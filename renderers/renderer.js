@@ -1,3 +1,5 @@
+import { PaletteInterpolation } from "../core/palette.js";
+
 export const RenderingEngine = {
   WEBGPU: "webgpu",
   WEBGL1: "webgl1",
@@ -25,11 +27,20 @@ export class Renderer {
 }
 
 export class RenderOptions {
-  constructor({ maxSuperSamples, deep, maxIter, palette, fn } = {}) {
+  constructor({
+    maxSuperSamples,
+    deep,
+    maxIter,
+    palette,
+    paletteInterpolation,
+    fn,
+  } = {}) {
     this.maxSuperSamples = maxSuperSamples;
     this.deep = deep;
     this.maxIter = maxIter;
     this.palette = palette;
+    this.paletteInterpolation =
+      paletteInterpolation ?? PaletteInterpolation.SPLINE;
     this.fn = fn;
   }
 }

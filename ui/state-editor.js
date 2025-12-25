@@ -1,4 +1,4 @@
-import { Palette } from "../core/palette.js";
+import { Palette, PaletteInterpolation } from "../core/palette.js";
 import { RenderingEngine } from "../renderers/renderer.js";
 import { appState, StateAttributes } from "../core/state.js";
 
@@ -7,6 +7,10 @@ const PALETTES = [
   Palette.ELECTRIC,
   Palette.RAINBOW,
   Palette.ZEBRA,
+];
+const PALETTE_INTERPOLATIONS = [
+  PaletteInterpolation.SPLINE,
+  PaletteInterpolation.LINEAR,
 ];
 const MIN_SUPER_SAMPLES = 1;
 const DEFAULT_SUPER_SAMPLES = 8;
@@ -32,6 +36,9 @@ export class AppStateEditor {
     this.gear = document.getElementById("gearIcon");
     this.rendererSelect = document.getElementById("rendererSelect");
     this.paletteSelect = document.getElementById("paletteSelect");
+    this.paletteInterpolationSelect = document.getElementById(
+      "paletteInterpolationSelect"
+    );
     this.iterAuto = document.getElementById("iterAuto");
     this.iterRange = document.getElementById("iterRange");
     this.iterValue = document.getElementById("iterValue");
@@ -48,6 +55,12 @@ export class AppStateEditor {
       opt.value = palette;
       opt.textContent = palette;
       this.paletteSelect.appendChild(opt);
+    });
+    PALETTE_INTERPOLATIONS.forEach((interp) => {
+      const opt = document.createElement("option");
+      opt.value = interp;
+      opt.textContent = interp.toLowerCase();
+      this.paletteInterpolationSelect.appendChild(opt);
     });
 
     this.maxSuperSamplesRange = document.getElementById("maxSuperSamplesRange");
@@ -70,6 +83,9 @@ export class AppStateEditor {
 
     this.paletteSelect.addEventListener("change", () => {
       appState.setPalette(this.paletteSelect.value);
+    });
+    this.paletteInterpolationSelect.addEventListener("change", () => {
+      appState.setPaletteInterpolation(this.paletteInterpolationSelect.value);
     });
 
     this.iterAuto.addEventListener("change", () => {
@@ -101,6 +117,8 @@ export class AppStateEditor {
       appState.deep
     ).name();
     this.paletteSelect.value = appState.palette ?? Palette.WIKIPEDIA;
+    this.paletteInterpolationSelect.value =
+      appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     this.iterAuto.checked = appState.maxIter === null;
     this.#refresh();
   }
@@ -137,6 +155,9 @@ export class AppStateEditor {
       this.#refresh();
     } else if (event.detail === StateAttributes.LAYOUT) {
       this.layoutSelect.value = appState.layout;
+    } else if (event.detail === StateAttributes.PALETTE_INTERPOLATION) {
+      this.paletteInterpolationSelect.value =
+        appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     }
   }
 

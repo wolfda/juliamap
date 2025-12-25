@@ -1,6 +1,6 @@
 import { COMPLEX_PLANE } from "../math/complex.js";
 import { Orbit, FN_MANDELBROT, FN_JULIA } from "../math/julia.js";
-import { getPaletteId } from "../core/palette.js";
+import { getPaletteId, getPaletteInterpolationId } from "../core/palette.js";
 import { hasWebgpu } from "./capabilities.js";
 import { Renderer, RenderingEngine, RenderResults } from "./renderer.js";
 
@@ -74,9 +74,9 @@ export class WebgpuRenderer extends Renderer {
     });
 
     // Create a buffer for the uniform data.
-    // We'll store centerX, centerY, scale, plus some padding, plus resolution as f32x2.
+    // We'll store the fractal uniforms plus padding for alignment.
     this.gpuUniformBuffer = this.gpuDevice.createBuffer({
-      size: 56, // was 48; we add 2 more f32s (scale, perturbScale)
+      size: 64, // was 56; we add palette interpolation and padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -291,8 +291,8 @@ export class WebgpuRenderer extends Renderer {
       Math.floor(options.maxSuperSamples ?? DEFAULT_MAX_SUPER_SAMPLES)
     );
 
-    // NOTE: now 56 bytes instead of 48
-    const uniformArray = new ArrayBuffer(56);
+    // NOTE: now 64 bytes instead of 56
+    const uniformArray = new ArrayBuffer(64);
     const dataView = new DataView(uniformArray);
     const mapCenter = COMPLEX_PLANE.complex().project(map.center);
     const fnParam0 = COMPLEX_PLANE.complex().project(options.fn.param0);
@@ -306,11 +306,17 @@ export class WebgpuRenderer extends Renderer {
     dataView.setUint32(24, maxIter, true); // maxIter
     dataView.setUint32(28, maxSuperSamples, true); // maxSuperSamples
     dataView.setUint32(32, getPaletteId(options.palette), true); // paletteId
-    dataView.setUint32(36, options.fn.id, true); // functionId
-    dataView.setFloat32(40, fnParam0.x, true); // param0
-    dataView.setFloat32(44, fnParam0.y, true); // param0
-    dataView.setFloat32(48, gpuScale, true);      // scale
-    dataView.setFloat32(52, perturbScale, true);  // perturbScale
+    dataView.setUint32(
+      36,
+      getPaletteInterpolationId(options.paletteInterpolation),
+      true
+    ); // paletteInterpolation
+    dataView.setUint32(40, options.fn.id, true); // functionId
+    dataView.setUint32(44, 0, true); // padding
+    dataView.setFloat32(48, fnParam0.x, true); // param0
+    dataView.setFloat32(52, fnParam0.y, true); // param0
+    dataView.setFloat32(56, gpuScale, true); // scale
+    dataView.setFloat32(60, perturbScale, true); // perturbScale
 
     this.gpuDevice.queue.writeBuffer(this.gpuUniformBuffer, 0, uniformArray);
 
@@ -420,7 +426,9 @@ struct FractalUniforms {
     maxIter        : u32,
     maxSamples     : u32,
     paletteId      : u32,
+    paletteInterpolation: u32,
     functionId     : u32,
+    _padding0      : u32,
     param0         : vec2f,
     scale          : f32,
     perturbScale   : f32,
@@ -468,7 +476,6 @@ fn rand() -> f32 {
     seed ^= seed << 13;
     seed ^= seed >> 17;
     seed ^= seed << 5;
-    // Convert the new seed to a float in the [0, 1) range.
     return f32(seed) / MAX_U32;
 }
 
@@ -487,10 +494,12 @@ const BLUE = vec3f(0, 0, 1);
 const MAGENTA = vec3f(1, 0, 1);
 const BLACK = vec3f(0, 0, 0);
 const WHITE = vec3f(1, 1, 1);
+const UNUSED = BLACK;
 
-const ELECTRIC = array<vec3f, 2>(BLUE, WHITE);
-const RAINBOW = array<vec3f, 6>(YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED);
-const ZEBRA = array<vec3f, 2>(WHITE, BLACK);
+const MAX_COLORS: u32 = 6u;
+const ELECTRIC = array<vec3f, MAX_COLORS>(BLUE, WHITE, UNUSED, UNUSED, UNUSED, UNUSED);
+const RAINBOW = array<vec3f, MAX_COLORS>(YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED);
+const ZEBRA = array<vec3f, MAX_COLORS>(WHITE, BLACK, UNUSED, UNUSED, UNUSED, UNUSED);
 
 // Same color palette as used on the Wikipedia page: https://en.wikipedia.org/wiki/Mandelbrot_set
 const WIKI0 = vec3f(  0,   7, 100) / 255.0;
@@ -498,56 +507,166 @@ const WIKI1 = vec3f( 32, 107, 203) / 255.0;
 const WIKI2 = vec3f(237, 255, 255) / 255.0;
 const WIKI3 = vec3f(255, 170,   0) / 255.0;
 const WIKI4 = vec3f(  0,   2,   0) / 255.0;
-const WIKIPEDIA = array<vec3f, 5>(WIKI0, WIKI1, WIKI2, WIKI3, WIKI4);
+const WIKIPEDIA = array<vec3f, MAX_COLORS>(WIKI0, WIKI1, WIKI2, WIKI3, WIKI4, UNUSED);
+const WIKIPEDIA_POSITIONS = array<f32, MAX_COLORS>(0.0, 0.16, 0.42, 0.6425, 0.8575, 1.0);
 
-fn interpolatePalette6Color(palette: array<vec3f, 6>, index: f32) -> vec3f {
-    let len = 6.0;
-    let c0 = palette[u32(fmod(len * index - 1, len))];
-    let c1 = palette[u32(fmod(len * index, len))];
-    let t = fmod(len * index, 1);
-    return c0 + t * (c1 - c0);
+const PALETTE_INTERPOLATION_LINEAR = 0u;
+const PALETTE_INTERPOLATION_SPLINE = 1u;
+
+// Interpolate the color with the given palette, using spline interpolation.
+fn interpolatePaletteSpline(palette: array<vec3f, MAX_COLORS>, count: u32, t: f32) -> vec3f {
+    let wrapped = fract(t);
+    let scaled = wrapped * f32(count);
+    let i = u32(min(scaled, f32(count) - 0.001));
+    let localT = scaled - f32(i);
+
+    let i0 = i;
+    let i1 = (i + 1u) % count;
+    let im1 = (i + count - 1u) % count;
+    let i2 = (i + 2u) % count;
+
+    let p0 = palette[i0];
+    let p1 = palette[i1];
+
+    let m0 = 0.5 * (palette[i1] - palette[im1]);
+    let m1 = 0.5 * (palette[i2] - palette[i0]);
+
+    let t2 = localT * localT;
+    let t3 = t2 * localT;
+
+    return (2.0 * t3 - 3.0 * t2 + 1.0) * p0
+        + (t3 - 2.0 * t2 + localT) * m0
+        + (-2.0 * t3 + 3.0 * t2) * p1
+        + (t3 - t2) * m1;
 }
 
-fn interpolatePalette5Color(palette: array<vec3f, 5>, index: f32) -> vec3f {
-    let len = 5.0;
-    let c0 = palette[u32(fmod(len * index - 1, len))];
-    let c1 = palette[u32(fmod(len * index, len))];
-    let t = fmod(len * index, 1);
-    return c0 + t * (c1 - c0);
+// Interpolate the color with the given palette, using linear interpolation.
+fn interpolatePaletteLinear(palette: array<vec3f, MAX_COLORS>, count: u32, t: f32) -> vec3f {
+    let wrapped = fract(t);
+    let scaled = wrapped * f32(count);
+    let i = u32(min(scaled, f32(count) - 0.001));
+    let localT = scaled - f32(i);
+
+    let c0 = palette[i];
+    let c1 = palette[(i + 1u) % count];
+
+    return c0 + localT * (c1 - c0);
 }
 
-fn interpolatePalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
-    let len = 2.0;
-    let c0 = palette[u32(fmod(len * index - 1, len))];
-    let c1 = palette[u32(fmod(len * index, len))];
-    let t = fmod(len * index, 1);
-    return c0 + t * (c1 - c0);
+// Interpolate the color with the given color palette, with fixed positions and spline interpolation
+fn interpolatePaletteSplinePos(
+    palette: array<vec3f, MAX_COLORS>,
+    positions: array<f32, MAX_COLORS>,
+    count: u32,
+    index: f32
+) -> vec3f {
+    let lastIndex = count - 1u;
+    let t = fmod(index, 1.0);
+
+    let firstPos = positions[0];
+    let lastPos = positions[lastIndex];
+    if (t <= firstPos) {
+        return palette[0];
+    }
+    if (t >= lastPos) {
+        let span = 1.0 - lastPos + firstPos;
+        let wrapT = (t - lastPos) / span;
+        let u = (f32(lastIndex) + wrapT) / f32(count);
+        return interpolatePaletteSpline(palette, count, u);
+    }
+
+    for (var i = 0u; i < lastIndex; i += 1u) {
+        let t0 = positions[i];
+        let t1 = positions[i + 1u];
+        if (t >= t0 && t <= t1) {
+            let localT = (t - t0) / (t1 - t0);
+            let u = (f32(i) + localT) / f32(count);
+            return interpolatePaletteSpline(palette, count, u);
+        }
+    }
+
+    return palette[lastIndex];
 }
 
-fn getPalette6Color(palette: array<vec3f, 6>, index: f32) -> vec3f {
-    return palette[u32(fmod(index, 1) * 6)];
+// Interpolate the color with the given color palette, with fixed positions and linear interpolation
+fn interpolatePaletteLinearPos(
+    palette: array<vec3f, MAX_COLORS>,
+    positions: array<f32, MAX_COLORS>,
+    count: u32,
+    index: f32
+) -> vec3f {
+    let lastIndex = count - 1u;
+    let t = fmod(index, 1.0);
+
+    let firstPos = positions[0];
+    let lastPos = positions[lastIndex];
+    if (t <= firstPos) {
+        return palette[0];
+    }
+    if (t >= lastPos) {
+        let span = 1.0 - lastPos + firstPos;
+        let wrapT = (t - lastPos) / span;
+        let u = (f32(lastIndex) + wrapT) / f32(count);
+        return interpolatePaletteLinear(palette, count, u);
+    }
+
+    for (var i = 0u; i < lastIndex; i += 1u) {
+        let t0 = positions[i];
+        let t1 = positions[i + 1u];
+        if (t >= t0 && t <= t1) {
+            let localT = (t - t0) / (t1 - t0);
+            let u = (f32(i) + localT) / f32(count);
+            return interpolatePaletteLinear(palette, count, u);
+        }
+    }
+
+    return palette[lastIndex];
 }
 
-fn getPalette2Color(palette: array<vec3f, 2>, index: f32) -> vec3f {
-    return palette[u32(fmod(index, 1) * 2)];
+fn interpolatePalette(palette: array<vec3f, MAX_COLORS>, count: u32, t: f32) -> vec3f {
+    if (u.paletteInterpolation == PALETTE_INTERPOLATION_LINEAR) {
+        return interpolatePaletteLinear(palette, count, t);
+    }
+    return interpolatePaletteSpline(palette, count, t);
 }
 
-// --- Julia functions
+fn interpolatePalettePos(
+    palette: array<vec3f, MAX_COLORS>,
+    positions: array<f32, MAX_COLORS>,
+    count: u32,
+    index: f32
+) -> vec3f {
+    if (u.paletteInterpolation == PALETTE_INTERPOLATION_LINEAR) {
+        return interpolatePaletteLinearPos(palette, positions, count, index);
+    }
+    return interpolatePaletteSplinePos(palette, positions, count, index);
+}
+
+fn getPaletteColor(palette: array<vec3f, MAX_COLORS>, count: u32, index: f32) -> vec3f {
+    return palette[u32(fmod(index, 1.0) * f32(count))];
+}
+
+// --- Julia / Mandelbrot coloring
 
 fn rainbowColor(escapeVelocity: f32) -> vec3f {
-    return interpolatePalette6Color(RAINBOW, escapeVelocity / 150);
+    return interpolatePalette(RAINBOW, 6u, escapeVelocity / 150);
 }
 
 fn electricColor(escapeVelocity: f32) -> vec3f {
-    return interpolatePalette2Color(ELECTRIC, escapeVelocity / 100);
+    return interpolatePalette(ELECTRIC, 2u, escapeVelocity / 100);
 }
 
 fn zebraColor(escapeVelocity: f32) -> vec3f {
-    return getPalette2Color(ZEBRA, escapeVelocity / 5);
+    return getPaletteColor(ZEBRA, 2u, escapeVelocity / 5);
 }
 
 fn wikipediaColor(escapeVelocity: f32) -> vec3f {
-    return interpolatePalette5Color(WIKIPEDIA, escapeVelocity / 15 + 0.2);
+    return interpolatePalettePos(
+        WIKIPEDIA,
+        WIKIPEDIA_POSITIONS,
+        5u,
+        escapeVelocity / 150
+    );
 }
 
 const ELECTRIC_PALETTE_ID = 0u;
@@ -556,9 +675,6 @@ const ZEBRA_PALETTE_ID = 2u;
 const WIKIPEDIA_PALETTE_ID = 3u;
 
 fn getColor(escapeVelocity: f32) -> vec3f {
-    // if (escapeVelocity < 0.0) {
-    //     return vec3f(1.0, 0.0, 1.0); // Magenta for NaN/infinity
-    // }
     if (escapeVelocity >= f32(u.maxIter)) {
         return BLACK;
     }
@@ -573,7 +689,7 @@ fn getColor(escapeVelocity: f32) -> vec3f {
             return zebraColor(escapeVelocity);
         }
         case WIKIPEDIA_PALETTE_ID, default: {
-            return wikipediaColor(escapeVelocity); 
+            return wikipediaColor(escapeVelocity);
         }
     }
 }
@@ -586,13 +702,13 @@ fn isFinite(x: f32) -> bool {
     return x * 0.0 == 0.0;
 }
 
-// Smoothen the escape velocity to avoid having bands of colors
 fn smoothEscapeVelocity(iter: u32, squareMod: f32) -> f32 {
-    // squareMod may have overflowed, return iter
-    if (!isFinite(squareMod)) {
+    if (!isFinite(squareMod) || squareMod <= 0.0) {
         return f32(iter);
     }
-    return f32(iter) + 1 - log2(log(squareMod));
+    let mag = sqrt(squareMod);
+    // ν = n + 1 - log2(log(|z|))
+    return f32(iter) + 1.0 - log2(log(mag));
 }
   
 fn incrementIterations(value: u32) {

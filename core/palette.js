@@ -5,10 +5,18 @@ export const Palette = {
   WIKIPEDIA: "wikipedia",
 };
 
+export const PaletteInterpolation = {
+  LINEAR: "LINEAR",
+  SPLINE: "SPLINE",
+};
+
 export const ELECTRIC_PALETTE_ID = 0;
 export const RAINBOW_PALETTE_ID = 1;
 export const ZEBRA_PALETTE_ID = 2;
 export const WIKIPEDIA_PALETTE_ID = 3;
+
+export const LINEAR_PALETTE_INTERPOLATION_ID = 0;
+export const SPLINE_PALETTE_INTERPOLATION_ID = 1;
 
 export function getPaletteId(palette) {
   switch (palette) {
@@ -21,6 +29,16 @@ export function getPaletteId(palette) {
     case Palette.WIKIPEDIA:
     default:
       return WIKIPEDIA_PALETTE_ID;
+  }
+}
+
+export function getPaletteInterpolationId(paletteInterpolation) {
+  switch (paletteInterpolation) {
+    case PaletteInterpolation.LINEAR:
+      return LINEAR_PALETTE_INTERPOLATION_ID;
+    case PaletteInterpolation.SPLINE:
+    default:
+      return SPLINE_PALETTE_INTERPOLATION_ID;
   }
 }
 
