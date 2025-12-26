@@ -12,7 +12,6 @@ const TARGET_FRAME_MS = 33; // ~30 fps budget
 const MIN_SUPER_SAMPLES = 1;
 const DEFAULT_SUPER_SAMPLES = 8;
 const MAX_SUPER_SAMPLES = 64;
-const INTERACTIVE_ITER_CAP = 2000;
 const INTERACTIVE_SUPER_SAMPLES_FACTOR = 0.5;
 const INTERACTION_LINGER_MS = 120;
 
@@ -416,7 +415,7 @@ export class FractalExplorer {
         ? interactiveMaxSuperSamples
         : maxSuperSamples,
       deep,
-      maxIter: this.interactionActive ? Math.min(maxIter, INTERACTIVE_ITER_CAP) : maxIter,
+      maxIter,
       palette,
       paletteInterpolation,
       fn,

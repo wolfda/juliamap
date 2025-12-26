@@ -130,7 +130,8 @@ export class AppStateEditor {
       if (
         renderer === RenderingEngine.WEBGPU ||
         renderer === RenderingEngine.WEBGL1 ||
-        renderer === RenderingEngine.WEBGL2
+        renderer === RenderingEngine.WEBGL2 ||
+        renderer === RenderingEngine.CPU
       ) {
         rendererConfigs.push(new RendererConfig(renderer, true));
       }
