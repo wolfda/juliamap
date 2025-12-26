@@ -7,12 +7,16 @@ uniform vec3 uCenterZoom;
 uniform int uMaxIter;
 uniform int uSamples;
 uniform int uPaletteId;
+uniform int uPaletteInterpolation;
 uniform int uUsePerturb;
 uniform int uOrbitCount;
 uniform int uFunctionId;
 uniform vec2 uParam0;
 
 #define MAX_ITER 10000
+#define MAX_SUPER_SAMPLES 64
+#define MIN_VARIANCE_SAMPLES 4
+#define SUPER_SAMPLE_VARIANCE 0.0005
 
 layout(std140) uniform OrbitBlock {
   vec4 uOrbitData[MAX_ITER / 2];
@@ -42,61 +46,135 @@ const vec3 BLUE = vec3(0, 0, 1);
 const vec3 MAGENTA = vec3(1, 0, 1);
 const vec3 BLACK = vec3(0, 0, 0);
 const vec3 WHITE = vec3(1, 1, 1);
+const vec3 UNUSED = BLACK;
 
-const vec3 ELECTRIC[2] = vec3[](BLUE, WHITE);
-const vec3 RAINBOW[6] = vec3[](YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED);
-const vec3 ZEBRA[2] = vec3[](WHITE, BLACK);
+const int MAX_COLORS = 6;
 
-const vec3 WIKIPEDIA[5] = vec3[](
-  vec3(0, 7, 100) / 255.0,
-  vec3(32, 107, 203) / 255.0,
-  vec3(237, 255, 255) / 255.0,
-  vec3(255, 170, 0) / 255.0,
-  vec3(0, 2, 0) / 255.0
+const vec3 ELECTRIC[MAX_COLORS] = vec3[](
+  BLUE, WHITE, UNUSED, UNUSED, UNUSED, UNUSED
+);
+const vec3 RAINBOW[MAX_COLORS] = vec3[](
+  YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED
+);
+const vec3 ZEBRA[MAX_COLORS] = vec3[](
+  WHITE, BLACK, UNUSED, UNUSED, UNUSED, UNUSED
 );
 
-vec3 interpolatePalette6Color(vec3 palette[6], float index) {
-  float len = 6.0;
-  int i0 = int(mod(len * index - 1.0, len));
-  int i1 = int(mod(len * index, len));
-  float t = mod(len * index, 1.0);
-  return palette[i0] + t * (palette[i1] - palette[i0]);
+const vec3 WIKI0 = vec3(0, 7, 100) / 255.0;
+const vec3 WIKI1 = vec3(32, 107, 203) / 255.0;
+const vec3 WIKI2 = vec3(237, 255, 255) / 255.0;
+const vec3 WIKI3 = vec3(255, 170, 0) / 255.0;
+const vec3 WIKI4 = vec3(0, 2, 0) / 255.0;
+const vec3 WIKIPEDIA[MAX_COLORS] = vec3[](
+  WIKI0, WIKI1, WIKI2, WIKI3, WIKI4, UNUSED
+);
+const float WIKIPEDIA_POSITIONS[MAX_COLORS] = float[](
+  0.0, 0.16, 0.42, 0.6425, 0.8575, 1.0
+);
+
+float fmod(float a, float b) {
+  return a - b * floor(a / b);
 }
 
-vec3 interpolatePalette5Color(vec3 palette[5], float index) {
-  float len = 5.0;
-  int i0 = int(mod(len * index - 1.0, len));
-  int i1 = int(mod(len * index, len));
-  float t = mod(len * index, 1.0);
-  return palette[i0] + t * (palette[i1] - palette[i0]);
+vec3 interpolatePaletteSpline(vec3 palette[MAX_COLORS], int count, float t) {
+  float wrapped = fmod(t, 1.0);
+  float scaled = wrapped * float(count);
+  int i = int(min(scaled, float(count) - 0.001));
+  float localT = scaled - float(i);
+
+  int i0 = i;
+  int i1 = (i + 1) % count;
+  int im1 = (i + count - 1) % count;
+  int i2 = (i + 2) % count;
+
+  vec3 p0 = palette[i0];
+  vec3 p1 = palette[i1];
+  vec3 m0 = 0.5 * (palette[i1] - palette[im1]);
+  vec3 m1 = 0.5 * (palette[i2] - palette[i0]);
+
+  float t2 = localT * localT;
+  float t3 = t2 * localT;
+
+  return (2.0 * t3 - 3.0 * t2 + 1.0) * p0
+    + (t3 - 2.0 * t2 + localT) * m0
+    + (-2.0 * t3 + 3.0 * t2) * p1
+    + (t3 - t2) * m1;
 }
 
-vec3 interpolatePalette2Color(vec3 palette[2], float index) {
-  float len = 2.0;
-  int i0 = int(mod(len * index - 1.0, len));
-  int i1 = int(mod(len * index, len));
-  float t = mod(len * index, 1.0);
-  return palette[i0] + t * (palette[i1] - palette[i0]);
+vec3 interpolatePaletteLinear(vec3 palette[MAX_COLORS], int count, float t) {
+  float wrapped = fmod(t, 1.0);
+  float scaled = wrapped * float(count);
+  int i = int(min(scaled, float(count) - 0.001));
+  float localT = scaled - float(i);
+
+  vec3 c0 = palette[i];
+  vec3 c1 = palette[(i + 1) % count];
+
+  return c0 + localT * (c1 - c0);
 }
 
-vec3 getPalette2Color(vec3 palette[2], float index) {
-  return palette[int(mod(index, 1.0) * 2.0)];
+vec3 interpolatePalettePos(
+  vec3 palette[MAX_COLORS],
+  float positions[MAX_COLORS],
+  int count,
+  float index
+) {
+  int lastIndex = count - 1;
+  float t = fmod(index, 1.0);
+  float firstPos = positions[0];
+  float lastPos = positions[lastIndex];
+  if (t <= firstPos) {
+    return palette[0];
+  }
+  if (t >= lastPos) {
+    float span = 1.0 - lastPos + firstPos;
+    float wrapT = (t - lastPos) / span;
+    float u = (float(lastIndex) + wrapT) / float(count);
+    if (uPaletteInterpolation == 0) {
+      return interpolatePaletteLinear(palette, count, u);
+    }
+    return interpolatePaletteSpline(palette, count, u);
+  }
+  for (int i = 0; i < lastIndex; i++) {
+    float t0 = positions[i];
+    float t1 = positions[i + 1];
+    if (t >= t0 && t <= t1) {
+      float localT = (t - t0) / (t1 - t0);
+      float u = (float(i) + localT) / float(count);
+      if (uPaletteInterpolation == 0) {
+        return interpolatePaletteLinear(palette, count, u);
+      }
+      return interpolatePaletteSpline(palette, count, u);
+    }
+  }
+  return palette[lastIndex];
+}
+
+vec3 interpolatePalette(vec3 palette[MAX_COLORS], int count, float t) {
+  if (uPaletteInterpolation == 0) {
+    return interpolatePaletteLinear(palette, count, t);
+  }
+  return interpolatePaletteSpline(palette, count, t);
+}
+
+vec3 getPaletteColor(vec3 palette[MAX_COLORS], int count, float t) {
+  return palette[int(fmod(t, 1.0) * float(count))];
 }
 
 vec3 rainbowColor(float escapeVelocity) {
-  return interpolatePalette6Color(RAINBOW, escapeVelocity / 150.0);
+  return interpolatePalette(RAINBOW, 6, escapeVelocity / 150.0);
 }
 
 vec3 electricColor(float escapeVelocity) {
-  return interpolatePalette2Color(ELECTRIC, escapeVelocity / 100.0);
+  return interpolatePalette(ELECTRIC, 2, escapeVelocity / 100.0);
 }
 
 vec3 zebraColor(float escapeVelocity) {
-  return getPalette2Color(ZEBRA, escapeVelocity / 5.0);
+  return getPaletteColor(ZEBRA, 2, escapeVelocity / 5.0);
 }
 
 vec3 wikipediaColor(float escapeVelocity) {
-  return interpolatePalette5Color(WIKIPEDIA, escapeVelocity / 15.0 + 0.2);
+  return interpolatePalettePos(WIKIPEDIA, WIKIPEDIA_POSITIONS, 5, escapeVelocity / 150.0);
 }
 
 #define ELECTRIC_PALETTE_ID 0
@@ -192,20 +270,40 @@ vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
 }
 
 vec3 renderSuperSample(vec2 sampleCoord, vec2 scaleFactor, int samples) {
-  vec3 color = vec3(0);
-  for (int i = 0; i < samples; i++) {
-    vec2 jitter =
-      vec2(
-        rand(gl_FragCoord.xy + float(i)),
-        rand(gl_FragCoord.yx + float(i) * 1.3)
-      ) - 0.5;
-    color += renderOne(sampleCoord + jitter, scaleFactor);
+  vec3 mean = vec3(0.0);
+  vec3 m2 = vec3(0.0);
+  int sampleCount = 0;
+
+  for (int i = 0; i < MAX_SUPER_SAMPLES; i++) {
+    if (i >= samples) {
+      break;
+    }
+    vec2 jitter = vec2(
+      rand(gl_FragCoord.xy + float(i)),
+      rand(gl_FragCoord.yx + float(i) * 1.3)
+    ) - 0.5;
+    vec3 sampleColor = renderOne(sampleCoord + jitter, scaleFactor);
+    sampleCount += 1;
+    vec3 delta = sampleColor - mean;
+    mean += delta / float(sampleCount);
+    vec3 delta2 = sampleColor - mean;
+    m2 += delta * delta2;
+
+    int minVarianceSamples = min(samples, MIN_VARIANCE_SAMPLES);
+    if (sampleCount >= minVarianceSamples) {
+      float denom = max(float(sampleCount - 1), 1.0);
+      vec3 variance = m2 / denom;
+      float maxVariance = max(variance.r, max(variance.g, variance.b));
+      if (maxVariance <= SUPER_SAMPLE_VARIANCE) {
+        break;
+      }
+    }
   }
-  return color / float(samples);
+  return mean;
 }
 
 void main() {
-  vec2 scaleFactor = (4.0 / uResolution.x) * exp2(-uCenterZoom.z);
+  vec2 scaleFactor = vec2((4.0 / uResolution.x) * exp2(-uCenterZoom.z));
   vec3 col;
   if (uSamples <= 1) {
     col = renderOne(gl_FragCoord.xy, scaleFactor);

@@ -1,12 +1,13 @@
 import { COMPLEX_PLANE } from "../math/complex.js";
 import { FN_JULIA, FN_MANDELBROT, Orbit } from "../math/julia.js";
-import { getPaletteId } from "../core/palette.js";
+import { getPaletteId, getPaletteInterpolationId } from "../core/palette.js";
 import { hasWebgl1, hasWebgl2 } from "./capabilities.js";
 import { RenderResults, Renderer } from "./renderer.js";
 
 const WEBGL2_MAX_ITERATIONS = 10000;
-const WEBGL1_SCALE = 0.5;
+const WEBGL1_SCALE = 1;
 const WEBGL1_MAX_SAMPLES = 64;
+const WEBGL2_MAX_SAMPLES = 64;
 
 const WEBGL1_FRAGMENT_URL = new URL("./webgl1.glsl", import.meta.url);
 const WEBGL2_FRAGMENT_URL = new URL("./webgl2.glsl", import.meta.url);
@@ -60,6 +61,7 @@ export class WebglRenderer extends Renderer {
     this.uMaxIter = undefined;
     this.uSamples = undefined;
     this.uPaletteId = undefined;
+    this.uPaletteInterpolation = undefined;
     this.uUsePerturb = undefined;
     this.uOrbitCount = undefined;
     this.uFunctionId = undefined;
@@ -75,11 +77,15 @@ export class WebglRenderer extends Renderer {
       throw new Error(isWebgl2 ? "Webgl2 is not supported" : "Webgl1 not supported");
     }
 
-    this.webGLCanvas = document.createElement("canvas");
-    this.webGLCanvas.width = this.canvas.width;
-    this.webGLCanvas.height = this.canvas.height;
-    this.webGLCanvas.style.display = "none";
-    document.body.appendChild(this.webGLCanvas);
+    if (isWebgl2) {
+      this.webGLCanvas = this.canvas;
+    } else {
+      this.webGLCanvas = document.createElement("canvas");
+      this.webGLCanvas.width = this.canvas.width;
+      this.webGLCanvas.height = this.canvas.height;
+      this.webGLCanvas.style.display = "none";
+      document.body.appendChild(this.webGLCanvas);
+    }
 
     this.gl = this.webGLCanvas.getContext(isWebgl2 ? "webgl2" : "webgl");
     const gl = this.gl;
@@ -120,6 +126,10 @@ export class WebglRenderer extends Renderer {
     this.uMaxIter = gl.getUniformLocation(this.webGLProgram, "uMaxIter");
     this.uSamples = gl.getUniformLocation(this.webGLProgram, "uSamples");
     this.uPaletteId = gl.getUniformLocation(this.webGLProgram, "uPaletteId");
+    this.uPaletteInterpolation = gl.getUniformLocation(
+      this.webGLProgram,
+      "uPaletteInterpolation"
+    );
     this.uUsePerturb = gl.getUniformLocation(this.webGLProgram, "uUsePerturb");
     this.uFunctionId = gl.getUniformLocation(this.webGLProgram, "uFunctionId");
     this.uParam0 = gl.getUniformLocation(this.webGLProgram, "uParam0");
@@ -164,6 +174,9 @@ export class WebglRenderer extends Renderer {
   }
 
   detach() {
+    if (!this.webGLCanvas || this.webGLCanvas === this.canvas) {
+      return;
+    }
     if (this.webGLCanvas?.parentNode) {
       this.webGLCanvas.parentNode.removeChild(this.webGLCanvas);
     }
@@ -181,16 +194,21 @@ export class WebglRenderer extends Renderer {
     gl.useProgram(this.webGLProgram);
     gl.uniform2f(this.uResolution, w, h);
     gl.uniform1i(this.uMaxIter, options.maxIter);
-    const maxSamples = isWebgl2 ? Infinity : WEBGL1_MAX_SAMPLES;
+    const maxSamples = isWebgl2 ? WEBGL2_MAX_SAMPLES : WEBGL1_MAX_SAMPLES;
     const samples = Math.min(
       Math.floor(Math.max(options.maxSuperSamples ?? 1, 1)),
       maxSamples
     );
     gl.uniform1i(this.uSamples, samples);
     gl.uniform1i(this.uPaletteId, getPaletteId(options.palette));
+    gl.uniform1i(
+      this.uPaletteInterpolation,
+      getPaletteInterpolationId(options.paletteInterpolation)
+    );
     gl.uniform1i(this.uUsePerturb, options.deep ? 1 : 0);
     gl.uniform1i(this.uFunctionId, options.fn.id);
-    gl.uniform2f(this.uParam0, options.fn.param0.x, options.fn.param0.y);
+    const fnParam0 = COMPLEX_PLANE.complex().project(options.fn.param0);
+    gl.uniform2f(this.uParam0, fnParam0.x, fnParam0.y);
 
     if (options.deep) {
       let orbit = undefined;
@@ -264,17 +282,22 @@ export class WebglRenderer extends Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    this.ctx.drawImage(
-      gl.canvas,
-      0,
-      this.canvas.height - h,
-      w,
-      h,
-      0,
-      0,
-      this.canvas.width,
-      this.canvas.height
-    );
+    if (!isWebgl2) {
+      const prevSmoothing = this.ctx.imageSmoothingEnabled;
+      this.ctx.imageSmoothingEnabled = false;
+      this.ctx.drawImage(
+        gl.canvas,
+        0,
+        this.canvas.height - h,
+        w,
+        h,
+        0,
+        0,
+        this.canvas.width,
+        this.canvas.height
+      );
+      this.ctx.imageSmoothingEnabled = prevSmoothing;
+    }
 
     return new RenderResults(this.id(), options);
   }

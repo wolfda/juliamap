@@ -61,6 +61,7 @@ export class FractalExplorer {
     this.zoomAnimationId = null;
     this.interactionActive = false;
     this.interactionTimeoutId = null;
+    this.isInteractive = false;
 
     this.onMouseDownHandler = this.#onMouseDown.bind(this);
     this.onMouseMoveHandler = this.#onMouseMove.bind(this);
@@ -85,7 +86,13 @@ export class FractalExplorer {
   }
 
   async initRenderer() {
-    if (this.renderingEngine === RenderingEngine.WEBGPU) {
+    if (this.renderingEngine === RenderingEngine.WEBGL2) {
+      this.#replaceCanvasForWebgl();
+    }
+    if (
+      this.renderingEngine === RenderingEngine.WEBGPU ||
+      this.renderingEngine === RenderingEngine.WEBGL2
+    ) {
       // Render straight to the visible canvas; no 2D context needed.
       this.renderCanvas = this.canvas;
       this.renderCtx = null;
@@ -103,7 +110,10 @@ export class FractalExplorer {
       this.renderingEngine
     );
 
-    if (this.renderer.id() !== RenderingEngine.WEBGPU) {
+    if (
+      this.renderer.id() !== RenderingEngine.WEBGPU &&
+      this.renderer.id() !== RenderingEngine.WEBGL2
+    ) {
       this.ctx = this.canvas.getContext("2d");
       this.ctx.imageSmoothingEnabled = false;
       this.ctx.imageSmoothingQuality = "low";
@@ -355,6 +365,7 @@ export class FractalExplorer {
   }
 
   setInteractive(interactive) {
+    this.isInteractive = interactive;
     if (interactive) {
       this.canvas.addEventListener("mousedown", this.onMouseDownHandler);
       this.canvas.addEventListener("wheel", this.onWheelHandler, {
@@ -373,6 +384,29 @@ export class FractalExplorer {
       this.canvas.removeEventListener("touchstart", this.onTouchStartHandler, {
         passive: false,
       });
+    }
+  }
+
+  #replaceCanvasForWebgl() {
+    const wasInteractive = this.isInteractive;
+    if (wasInteractive) {
+      this.setInteractive(false);
+    }
+
+    const oldCanvas = this.canvas;
+    const nextCanvas = document.createElement("canvas");
+    nextCanvas.width = oldCanvas.width;
+    nextCanvas.height = oldCanvas.height;
+    nextCanvas.style.imageRendering = "pixelated";
+
+    if (this.isAttached) {
+      this.divContainer.replaceChild(nextCanvas, oldCanvas);
+    }
+
+    this.canvas = nextCanvas;
+
+    if (wasInteractive) {
+      this.setInteractive(true);
     }
   }
 
@@ -494,7 +528,10 @@ export class FractalExplorer {
   }
 
   #captureLatestFrame() {
-    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
+    if (
+      this.renderer?.id() === RenderingEngine.WEBGPU ||
+      this.renderer?.id() === RenderingEngine.WEBGL2
+    ) {
       return;
     }
     if (
@@ -545,7 +582,10 @@ export class FractalExplorer {
     // Reproject the freshly rendered frame onto the current viewport so
     // completed renders never "snap back" to the zoom/center they started with.
     this.#drawPreviewFromLastRender();
-    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
+    if (
+      this.renderer?.id() === RenderingEngine.WEBGPU ||
+      this.renderer?.id() === RenderingEngine.WEBGL2
+    ) {
       this.canvas.style.transformOrigin = "0 0";
       this.canvas.style.transform = "translate(0px, 0px) scale(1)";
     }
@@ -582,8 +622,11 @@ export class FractalExplorer {
     const tx = targetX - scale * w * 0.5;
     const ty = targetY - scale * h * 0.5;
 
-    if (this.renderer?.id() === RenderingEngine.WEBGPU) {
-      // For WebGPU we can't repaint via 2D; use a CSS transform to preview.
+    if (
+      this.renderer?.id() === RenderingEngine.WEBGPU ||
+      this.renderer?.id() === RenderingEngine.WEBGL2
+    ) {
+      // For WebGPU/WebGL2 we can't repaint via 2D; use a CSS transform to preview.
       this.canvas.style.transformOrigin = "0 0";
       const cssTx = tx / DPR;
       const cssTy = ty / DPR;

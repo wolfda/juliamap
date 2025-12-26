@@ -5,6 +5,7 @@ uniform vec3 uCenterZoom;
 uniform int uMaxIter;
 uniform int uSamples;
 uniform int uPaletteId;
+uniform int uPaletteInterpolation;
 uniform int uUsePerturb;
 
 uniform sampler2D uOrbitTex;
@@ -17,6 +18,9 @@ uniform vec2 uParam0;
 #define MAX_ITER 10000
 #define MAX_REF_ORBIT 10000
 #define BAILOUT 128.0
+#define MAX_SUPER_SAMPLES 64
+#define MIN_VARIANCE_SAMPLES 4
+#define SUPER_SAMPLE_VARIANCE 0.0005
 
 vec2 complex_square(vec2 c) {
   return vec2(c.x * c.x - c.y * c.y, 2.0 * c.x * c.y);
@@ -32,6 +36,10 @@ float complex_square_mod(vec2 c) {
 
 float rand(vec2 co) {
   return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float fmod(float a, float b) {
+  return a - b * floor(a / b);
 }
 
 const vec3 RED = vec3(1, 0, 0);
@@ -55,6 +63,14 @@ const vec3 WIKI2 = vec3(237, 255, 255) / 255.0;
 const vec3 WIKI3 = vec3(255, 170, 0) / 255.0;
 const vec3 WIKI4 = vec3(0, 2, 0) / 255.0;
 
+float getWikipediaPosition(int index) {
+  if (index == 0) return 0.0;
+  else if (index == 1) return 0.16;
+  else if (index == 2) return 0.42;
+  else if (index == 3) return 0.6425;
+  else return 0.8575;
+}
+
 vec3 getRainbowColorAtIndex(int index) {
   if (index == 0) return YELLOW;
   else if (index == 1) return GREEN;
@@ -62,18 +78,6 @@ vec3 getRainbowColorAtIndex(int index) {
   else if (index == 3) return BLUE;
   else if (index == 4) return MAGENTA;
   else return RED;
-}
-
-vec3 interpolateRainbowPalette(float index) {
-  float len = 6.0;
-  float pos = len * index;
-  int idx0 = int(mod(pos - 1.0, len));
-  int idx1 = int(mod(pos, len));
-  return mix(
-    getRainbowColorAtIndex(idx0),
-    getRainbowColorAtIndex(idx1),
-    fract(pos)
-  );
 }
 
 vec3 getWikipediaColorAtIndex(int index) {
@@ -84,34 +88,121 @@ vec3 getWikipediaColorAtIndex(int index) {
   else return WIKI4;
 }
 
-vec3 interpolateWikipediaPalette(float index) {
-  float len = 5.0;
-  float pos = len * index;
-  int idx0 = int(mod(pos - 1.0, len));
-  int idx1 = int(mod(pos, len));
-  return mix(
-    getWikipediaColorAtIndex(idx0),
-    getWikipediaColorAtIndex(idx1),
-    fract(pos)
-  );
+#define ELECTRIC_PALETTE_ID 0
+#define RAINBOW_PALETTE_ID 1
+#define ZEBRA_PALETTE_ID 2
+#define WIKIPEDIA_PALETTE_ID 3
+
+#define PALETTE_INTERPOLATION_LINEAR 0
+
+vec3 getPaletteColorById(int paletteId, int index) {
+  if (paletteId == ELECTRIC_PALETTE_ID) {
+    return index == 0 ? ELECTRIC0 : ELECTRIC1;
+  }
+  if (paletteId == RAINBOW_PALETTE_ID) {
+    return getRainbowColorAtIndex(index);
+  }
+  if (paletteId == ZEBRA_PALETTE_ID) {
+    return index == 0 ? ZEBRA0 : ZEBRA1;
+  }
+  return getWikipediaColorAtIndex(index);
 }
 
-vec3 interpolateElectricPalette(float index) {
-  float len = 2.0;
-  float pos = len * index;
-  int idx0 = int(mod(pos - 1.0, len));
-  int idx1 = int(mod(pos, len));
-  vec3 colorFrom = idx0 == 0 ? ELECTRIC0 : ELECTRIC1;
-  vec3 colorTo = idx1 == 0 ? ELECTRIC0 : ELECTRIC1;
-  return mix(colorFrom, colorTo, fract(pos));
+float getPalettePositionById(int paletteId, int index) {
+  if (paletteId != WIKIPEDIA_PALETTE_ID) {
+    return float(index);
+  }
+  return getWikipediaPosition(index);
+}
+
+vec3 interpolatePaletteSpline(int paletteId, int count, float index) {
+  float wrapped = fmod(index, 1.0);
+  float scaled = wrapped * float(count);
+  int i = int(min(scaled, float(count) - 0.001));
+  float localT = scaled - float(i);
+
+  int i0 = i;
+  int i1 = i + 1;
+  if (i1 >= count) i1 -= count;
+  int im1 = i - 1;
+  if (im1 < 0) im1 += count;
+  int i2 = i + 2;
+  if (i2 >= count) i2 -= count;
+  if (i2 >= count) i2 -= count;
+
+  vec3 p0 = getPaletteColorById(paletteId, i0);
+  vec3 p1 = getPaletteColorById(paletteId, i1);
+  vec3 m0 = 0.5 * (getPaletteColorById(paletteId, i1) - getPaletteColorById(paletteId, im1));
+  vec3 m1 = 0.5 * (getPaletteColorById(paletteId, i2) - getPaletteColorById(paletteId, i0));
+
+  float t2 = localT * localT;
+  float t3 = t2 * localT;
+
+  return (2.0 * t3 - 3.0 * t2 + 1.0) * p0
+    + (t3 - 2.0 * t2 + localT) * m0
+    + (-2.0 * t3 + 3.0 * t2) * p1
+    + (t3 - t2) * m1;
+}
+
+vec3 interpolatePaletteLinear(int paletteId, int count, float index) {
+  float wrapped = fmod(index, 1.0);
+  float scaled = wrapped * float(count);
+  int i0 = int(min(scaled, float(count) - 0.001));
+  int i1 = i0 + 1;
+  if (i1 >= count) i1 -= count;
+  float t = scaled - float(i0);
+  vec3 c0 = getPaletteColorById(paletteId, i0);
+  vec3 c1 = getPaletteColorById(paletteId, i1);
+  return c0 + t * (c1 - c0);
+}
+
+vec3 interpolatePalette(int paletteId, int count, float index) {
+  if (uPaletteInterpolation == PALETTE_INTERPOLATION_LINEAR) {
+    return interpolatePaletteLinear(paletteId, count, index);
+  }
+  return interpolatePaletteSpline(paletteId, count, index);
+}
+
+vec3 interpolatePalettePos(int paletteId, int count, float index) {
+  int lastIndex = count - 1;
+  float t = fmod(index, 1.0);
+  float firstPos = getPalettePositionById(paletteId, 0);
+  float lastPos = getPalettePositionById(paletteId, lastIndex);
+
+  if (t <= firstPos) {
+    return getPaletteColorById(paletteId, 0);
+  }
+  if (t >= lastPos) {
+    float span = 1.0 - lastPos + firstPos;
+    float wrapT = (t - lastPos) / span;
+    float u = (float(lastIndex) + wrapT) / float(count);
+    return interpolatePalette(paletteId, count, u);
+  }
+  for (int i = 0; i < 6; i++) {
+    if (i >= lastIndex) {
+      break;
+    }
+    float t0 = getPalettePositionById(paletteId, i);
+    float t1 = getPalettePositionById(paletteId, i + 1);
+    if (t >= t0 && t <= t1) {
+      float localT = (t - t0) / (t1 - t0);
+      float u = (float(i) + localT) / float(count);
+      return interpolatePalette(paletteId, count, u);
+    }
+  }
+  return getPaletteColorById(paletteId, lastIndex);
+}
+
+vec3 getPaletteColor(int paletteId, int count, float index) {
+  return getPaletteColorById(paletteId, int(fmod(index, 1.0) * float(count)));
 }
 
 vec3 electricColor(float escapeVelocity) {
-  return interpolateElectricPalette(escapeVelocity / 100.0);
+  return interpolatePalette(ELECTRIC_PALETTE_ID, 2, escapeVelocity / 100.0);
 }
 
 vec3 rainbowColor(float escapeVelocity) {
-  return interpolateRainbowPalette(escapeVelocity / 150.0);
+  return interpolatePalette(RAINBOW_PALETTE_ID, 6, escapeVelocity / 150.0);
 }
 
 vec3 zebraColor(float escapeVelocity) {
@@ -120,7 +211,7 @@ vec3 zebraColor(float escapeVelocity) {
 }
 
 vec3 wikipediaColor(float escapeVelocity) {
-  return interpolateWikipediaPalette(escapeVelocity / 15.0 + 0.2);
+  return interpolatePalettePos(WIKIPEDIA_PALETTE_ID, 5, escapeVelocity / 150.0);
 }
 
 vec2 getOrbitPoint(int index) {
@@ -174,11 +265,6 @@ float juliaPerturb(vec2 dz0, vec2 dc) {
   return float(uMaxIter);
 }
 
-#define ELECTRIC_PALETTE_ID 0
-#define RAINBOW_PALETTE_ID 1
-#define ZEBRA_PALETTE_ID 2
-#define WIKIPEDIA_PALETTE_ID 3
-
 #define FN_MANDELBROT 0
 #define FN_JULIA 1
 
@@ -218,8 +304,10 @@ vec3 renderOne(vec2 fragCoord, vec2 scaleFactor) {
 }
 
 vec3 renderSuperSample(vec2 sampleCoord, vec2 scaleFactor, int samples) {
-  vec3 color = vec3(0.0);
-  for (int i = 0; i < 64; i++) {
+  vec3 mean = vec3(0.0);
+  vec3 m2 = vec3(0.0);
+  int sampleCount = 0;
+  for (int i = 0; i < MAX_SUPER_SAMPLES; i++) {
     if (i >= samples) {
       break;
     }
@@ -227,13 +315,30 @@ vec3 renderSuperSample(vec2 sampleCoord, vec2 scaleFactor, int samples) {
       rand(gl_FragCoord.xy + float(i)),
       rand(gl_FragCoord.yx + float(i) * 1.3)
     ) - 0.5;
-    color += renderOne(sampleCoord + jitter, scaleFactor);
+    vec3 sample = renderOne(sampleCoord + jitter, scaleFactor);
+    sampleCount += 1;
+    vec3 delta = sample - mean;
+    mean += delta / float(sampleCount);
+    vec3 delta2 = sample - mean;
+    m2 += delta * delta2;
+
+    int minVarianceSamples = samples < MIN_VARIANCE_SAMPLES
+      ? samples
+      : MIN_VARIANCE_SAMPLES;
+    if (sampleCount >= minVarianceSamples) {
+      float denom = max(float(sampleCount - 1), 1.0);
+      vec3 variance = m2 / denom;
+      float maxVariance = max(variance.r, max(variance.g, variance.b));
+      if (maxVariance <= SUPER_SAMPLE_VARIANCE) {
+        break;
+      }
+    }
   }
-  return color / float(samples);
+  return mean;
 }
 
 void main() {
-  vec2 scaleFactor = (4.0 / uResolution.x) * exp2(-uCenterZoom.z);
+  vec2 scaleFactor = vec2((4.0 / uResolution.x) * exp2(-uCenterZoom.z));
 
   if (uSamples <= 1) {
     gl_FragColor = vec4(renderOne(gl_FragCoord.xy, scaleFactor), 1);
