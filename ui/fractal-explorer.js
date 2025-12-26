@@ -2,6 +2,7 @@ import { BigComplexPlane, Complex, COMPLEX_PLANE } from "../math/complex.js";
 import { DEFAULT_FN } from "../math/julia.js";
 import { MapControl } from "../core/map.js";
 import { Palette } from "../core/palette.js";
+import { DeepMode } from "../core/state.js";
 import { RenderingEngine, RenderOptions } from "../renderers/renderer.js";
 import { createRenderer } from "../renderers/renderers.js";
 
@@ -402,7 +403,9 @@ export class FractalExplorer {
     }
     const maxSuperSamples = this.options.maxSuperSamples ?? DEFAULT_SUPER_SAMPLES;
     let maxIter = this.options.maxIter ?? this.#getDefaultIter();
-    const deep = this.options.deep ?? this.map.zoom > 16;
+    const deepMode = this.options.deepMode ?? DeepMode.AUTO;
+    const deep =
+      deepMode === DeepMode.AUTO ? this.map.zoom > 16 : deepMode === DeepMode.YES;
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const paletteInterpolation = this.options.paletteInterpolation;
     const fn = this.options.fn ?? DEFAULT_FN;

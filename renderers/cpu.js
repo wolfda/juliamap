@@ -22,7 +22,7 @@ export class CpuRenderer extends Renderer {
     this.currentWorkers = [];
     this.renderRunning = false;
     this.pendingRequest = null;
-    this.cpuCount = 10 /*getCpuCount()*/;
+    this.cpuCount = getCpuCount();
     this.orbitWorker = null;
     this.nextOrbitRequestId = 1;
     this.pendingOrbitRequests = new Map();

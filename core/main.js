@@ -1,4 +1,3 @@
-import { RenderOptions } from "../renderers/renderer.js";
 import { appState, StateAttributes } from "../core/state.js";
 import {
   getDefaultRenderingEngine,
@@ -23,13 +22,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   juliaExplorer = await JuliaExplorer.create({
     renderingEngine:
       appState.renderingEngine ?? (await getDefaultRenderingEngine()),
-    options: new RenderOptions({
+    options: {
       palette: appState.palette,
       paletteInterpolation: appState.paletteInterpolation,
       maxIter: appState.maxIter,
-      deep: appState.deep,
+      deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
-    }),
+    },
     layout: appState.layout ?? Layout.MANDEL,
     onChanged: onViewportChanged,
     onRendered: updateStats,
@@ -139,6 +138,9 @@ async function onAppStateChanged(event) {
     case StateAttributes.PALETTE_INTERPOLATION:
       updatePaletteInterpolation();
       break;
+    case StateAttributes.DEEP_MODE:
+      updateDeepMode();
+      break;
     case StateAttributes.MAX_ITER:
       updateMaxIter();
       break;
@@ -157,13 +159,13 @@ async function updateRenderer() {
   juliaExplorer.detach();
   juliaExplorer = await JuliaExplorer.create({
     renderingEngine: renderer,
-    options: new RenderOptions({
+    options: {
       palette: appState.palette,
       paletteInterpolation: appState.paletteInterpolation,
       maxIter: appState.maxIter,
-      deep: appState.deep,
+      deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
-    }),
+    },
     onChanged: onViewportChanged,
     onRendered: updateStats,
   });
@@ -189,6 +191,14 @@ function updatePaletteInterpolation() {
   juliaExplorer.mandelExplorer.render(true);
   juliaExplorer.juliaExplorer.render(true);
 }
+
+function updateDeepMode() {
+  juliaExplorer.mandelExplorer.options.deepMode = appState.deepMode;
+  juliaExplorer.juliaExplorer.options.deepMode = appState.deepMode;
+  juliaExplorer.mandelExplorer.render(true);
+  juliaExplorer.juliaExplorer.render(true);
+}
+
 function updateMaxIter() {
   juliaExplorer.mandelExplorer.options.maxIter = appState.maxIter;
   juliaExplorer.juliaExplorer.options.maxIter = appState.maxIter;

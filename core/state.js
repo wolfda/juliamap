@@ -7,6 +7,12 @@ export const Layout = {
   JULIA: "julia",
 };
 
+export const DeepMode = {
+  AUTO: "auto",
+  NO: "no",
+  YES: "yes",
+};
+
 const DEFAULT_CENTER = [new Complex(-0.5, 0), 0];
 const ZERO_CENTER = [new Complex(0, 0), 0];
 const DEFAULT_LAYOUT = Layout.MANDEL;
@@ -17,6 +23,7 @@ export const StateAttributes = {
   VIEWPORT: "viewport",
   LAYOUT: "layout",
   RENDERING_ENGINE: "renderingEngine",
+  DEEP_MODE: "deepMode",
   PALETTE: "palette",
   PALETTE_INTERPOLATION: "paletteInterpolation",
   MAX_ITER: "maxIter",
@@ -31,14 +38,23 @@ export class AppState extends EventTarget {
     const [jcenter, jzoom] = parseXYZ(params.get("jpos"), ZERO_CENTER);
     const layout = params.get("layout") ?? DEFAULT_LAYOUT;
     let renderingEngine = params.get("renderer");
-    let deep = null;
+    let deepMode = DeepMode.AUTO;
     if (renderingEngine) {
       const split = renderingEngine.split(".");
-      deep = false;
       if (split.length > 1) {
         renderingEngine = split[0];
-        deep = split[1] === "deep";
+        if (split[1] === "deep") {
+          deepMode = DeepMode.YES;
+        }
       }
+    }
+    const deepParam = params.get("deep");
+    if (
+      deepParam === DeepMode.AUTO ||
+      deepParam === DeepMode.NO ||
+      deepParam === DeepMode.YES
+    ) {
+      deepMode = deepParam;
     }
     let palette = params.get("palette");
     if (palette === DEFAULT_PALETTE) {
@@ -61,7 +77,7 @@ export class AppState extends EventTarget {
       paletteInterpolation,
       maxIter,
       maxSuperSamples,
-      deep,
+      deepMode,
     });
   }
 
@@ -76,7 +92,7 @@ export class AppState extends EventTarget {
     paletteInterpolation,
     maxIter,
     maxSuperSamples,
-    deep,
+    deepMode,
   }) {
     super();
 
@@ -90,7 +106,7 @@ export class AppState extends EventTarget {
 
     this.layout = layout;
     this.renderingEngine = renderingEngine;
-    this.deep = deep;
+    this.deepMode = deepMode ?? DeepMode.AUTO;
     this.palette = palette;
     this.paletteInterpolation = paletteInterpolation;
     this.maxIter = maxIter;
@@ -114,11 +130,17 @@ export class AppState extends EventTarget {
     }
   }
 
-  setRenderingEngine(renderingEngine, deep) {
-    if (this.renderingEngine !== renderingEngine || this.deep !== deep) {
+  setRenderingEngine(renderingEngine) {
+    if (this.renderingEngine !== renderingEngine) {
       this.renderingEngine = renderingEngine;
-      this.deep = deep;
       this.#triggerChange(StateAttributes.RENDERING_ENGINE);
+    }
+  }
+
+  setDeepMode(deepMode) {
+    if (this.deepMode !== deepMode) {
+      this.deepMode = deepMode;
+      this.#triggerChange(StateAttributes.DEEP_MODE);
     }
   }
 
@@ -191,12 +213,14 @@ export class AppState extends EventTarget {
         params.delete("layout");
       }
       if (this.renderingEngine) {
-        params.set(
-          "renderer",
-          this.renderingEngine + (this.deep ? ".deep" : "")
-        );
+        params.set("renderer", this.renderingEngine);
       } else {
         params.delete("renderer");
+      }
+      if (this.deepMode && this.deepMode !== DeepMode.AUTO) {
+        params.set("deep", this.deepMode);
+      } else {
+        params.delete("deep");
       }
       if (this.maxIter !== null) {
         params.set("iter", this.maxIter);

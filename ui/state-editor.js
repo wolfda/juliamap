@@ -1,6 +1,5 @@
 import { Palette, PaletteInterpolation } from "../core/palette.js";
-import { RenderingEngine } from "../renderers/renderer.js";
-import { appState, StateAttributes } from "../core/state.js";
+import { appState, DeepMode, StateAttributes } from "../core/state.js";
 
 const PALETTES = [
   Palette.WIKIPEDIA,
@@ -12,29 +11,18 @@ const PALETTE_INTERPOLATIONS = [
   PaletteInterpolation.SPLINE,
   PaletteInterpolation.LINEAR,
 ];
+const RENDERER_AUTO = "auto";
+const DEEP_MODES = [DeepMode.AUTO, DeepMode.NO, DeepMode.YES];
 const MIN_SUPER_SAMPLES = 1;
 const DEFAULT_SUPER_SAMPLES = 8;
 const MAX_SUPER_SAMPLES = 64;
-
-class RendererConfig {
-  constructor(renderer, deep) {
-    this.renderer = renderer;
-    this.deep = deep;
-  }
-
-  name() {
-    if (this.renderer === null) {
-      return "auto";
-    }
-    return this.deep ? this.renderer + ".deep" : this.renderer;
-  }
-}
 
 export class AppStateEditor {
   constructor(supportedRenderers) {
     this.panel = document.getElementById("controlPanel");
     this.gear = document.getElementById("gearIcon");
     this.rendererSelect = document.getElementById("rendererSelect");
+    this.deepSelect = document.getElementById("deepSelect");
     this.paletteSelect = document.getElementById("paletteSelect");
     this.paletteInterpolationSelect = document.getElementById(
       "paletteInterpolationSelect"
@@ -42,13 +30,17 @@ export class AppStateEditor {
     this.iterAuto = document.getElementById("iterAuto");
     this.iterRange = document.getElementById("iterRange");
     this.iterValue = document.getElementById("iterValue");
-    this.rendererConfigs = {};
-    this.#getRenderingConfigs(supportedRenderers).forEach((config) => {
-      this.rendererConfigs[config.name()] = config;
+    [RENDERER_AUTO, ...supportedRenderers].forEach((renderer) => {
       const opt = document.createElement("option");
-      opt.value = config.name();
-      opt.textContent = config.name();
+      opt.value = renderer;
+      opt.textContent = renderer;
       this.rendererSelect.appendChild(opt);
+    });
+    DEEP_MODES.forEach((mode) => {
+      const opt = document.createElement("option");
+      opt.value = mode;
+      opt.textContent = mode;
+      this.deepSelect.appendChild(opt);
     });
     PALETTES.forEach((palette) => {
       const opt = document.createElement("option");
@@ -77,8 +69,15 @@ export class AppStateEditor {
     });
 
     this.rendererSelect.addEventListener("change", () => {
-      const renderer = this.getSelectedRenderer();
-      appState.setRenderingEngine(renderer.renderer, renderer.deep);
+      const renderer =
+        this.rendererSelect.value === RENDERER_AUTO
+          ? null
+          : this.rendererSelect.value;
+      appState.setRenderingEngine(renderer);
+    });
+
+    this.deepSelect.addEventListener("change", () => {
+      appState.setDeepMode(this.deepSelect.value);
     });
 
     this.paletteSelect.addEventListener("change", () => {
@@ -112,31 +111,13 @@ export class AppStateEditor {
     this.maxSuperSamplesRange.min = MIN_SUPER_SAMPLES;
     this.maxSuperSamplesRange.max = MAX_SUPER_SAMPLES;
 
-    this.rendererSelect.value = new RendererConfig(
-      appState.renderingEngine,
-      appState.deep
-    ).name();
+    this.rendererSelect.value = appState.renderingEngine ?? RENDERER_AUTO;
+    this.deepSelect.value = appState.deepMode ?? DeepMode.AUTO;
     this.paletteSelect.value = appState.palette ?? Palette.WIKIPEDIA;
     this.paletteInterpolationSelect.value =
       appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     this.iterAuto.checked = appState.maxIter === null;
     this.#refresh();
-  }
-
-  #getRenderingConfigs(renderers) {
-    return [null, ...renderers].flatMap((renderer) => {
-      const rendererConfigs = [];
-      rendererConfigs.push(new RendererConfig(renderer, renderer === null));
-      if (
-        renderer === RenderingEngine.WEBGPU ||
-        renderer === RenderingEngine.WEBGL1 ||
-        renderer === RenderingEngine.WEBGL2 ||
-        renderer === RenderingEngine.CPU
-      ) {
-        rendererConfigs.push(new RendererConfig(renderer, true));
-      }
-      return rendererConfigs;
-    });
   }
 
   #refresh() {
@@ -156,14 +137,14 @@ export class AppStateEditor {
       this.#refresh();
     } else if (event.detail === StateAttributes.LAYOUT) {
       this.layoutSelect.value = appState.layout;
+    } else if (event.detail === StateAttributes.RENDERING_ENGINE) {
+      this.rendererSelect.value = appState.renderingEngine ?? RENDERER_AUTO;
+    } else if (event.detail === StateAttributes.DEEP_MODE) {
+      this.deepSelect.value = appState.deepMode ?? DeepMode.AUTO;
     } else if (event.detail === StateAttributes.PALETTE_INTERPOLATION) {
       this.paletteInterpolationSelect.value =
         appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     }
-  }
-
-  getSelectedRenderer() {
-    return this.rendererConfigs[this.rendererSelect.value];
   }
 
   getMaxSuperSamples() {
