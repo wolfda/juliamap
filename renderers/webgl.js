@@ -69,6 +69,9 @@ export class WebglRenderer extends Renderer {
     this.uOrbitTex = undefined;
     this.uOrbitTexSize = undefined;
     this.orbitBuffer = undefined;
+    this.orbitWorker = undefined;
+    this.nextOrbitRequestId = 1;
+    this.pendingOrbitRequests = new Map();
   }
 
   async init() {
@@ -165,6 +168,8 @@ export class WebglRenderer extends Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(aPosition);
     gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    this.#initOrbitWorker();
   }
 
   resize(width, height) {
@@ -174,6 +179,11 @@ export class WebglRenderer extends Renderer {
   }
 
   detach() {
+    if (this.orbitWorker) {
+      this.orbitWorker.terminate();
+      this.orbitWorker = undefined;
+      this.pendingOrbitRequests.clear();
+    }
     if (!this.webGLCanvas || this.webGLCanvas === this.canvas) {
       return;
     }
@@ -182,7 +192,97 @@ export class WebglRenderer extends Renderer {
     }
   }
 
-  render(map, options) {
+  #initOrbitWorker() {
+    try {
+      this.orbitWorker = new Worker(
+        new URL("./orbit-worker.js", import.meta.url),
+        { type: "module" }
+      );
+      this.orbitWorker.onmessage = ({ data }) => {
+        const { requestId, orbit, error } = data;
+        const pending = this.pendingOrbitRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+        this.pendingOrbitRequests.delete(requestId);
+        if (error) {
+          pending.reject?.(new Error(error));
+        } else {
+          if (orbit?.iters && !(orbit.iters instanceof Float32Array)) {
+            orbit.iters = new Float32Array(orbit.iters);
+          }
+          pending.resolve?.(orbit);
+        }
+      };
+      this.orbitWorker.onerror = (err) => {
+        console.warn("[orbit worker] error", err);
+      };
+    } catch (err) {
+      console.warn(
+        "[orbit worker] failed to initialize; falling back to main thread",
+        err
+      );
+      this.orbitWorker = undefined;
+    }
+  }
+
+  #serializeComplex(c) {
+    if (!c) {
+      return { x: 0, y: 0, planeExponent: null };
+    }
+    const plane = c.plane ?? COMPLEX_PLANE;
+    const isBig = plane.isBigComplex();
+    return {
+      x: c.x,
+      y: c.y,
+      planeExponent: isBig ? plane.exponent : null,
+    };
+  }
+
+  async #computeOrbit(map, w, h, maxIter, options) {
+    if (!this.orbitWorker) {
+      return this.#computeOrbitSync(map, w, h, maxIter, options);
+    }
+
+    const mapPlane = map.plane ?? COMPLEX_PLANE;
+    const requestId = this.nextOrbitRequestId++;
+    const payload = {
+      map: {
+        planeExponent: mapPlane.isBigComplex() ? mapPlane.exponent : null,
+        center: this.#serializeComplex(map.center),
+        zoom: map.zoom,
+      },
+      width: w,
+      height: h,
+      maxIter,
+      fnId: options.fn.id,
+      fnParam0: this.#serializeComplex(options.fn.param0),
+    };
+
+    return new Promise((resolve, reject) => {
+      this.pendingOrbitRequests.set(requestId, { resolve, reject });
+      this.orbitWorker.postMessage({ requestId, payload });
+    }).catch((err) => {
+      console.warn(
+        "[orbit worker] falling back to main thread computation",
+        err
+      );
+      return this.#computeOrbitSync(map, w, h, maxIter, options);
+    });
+  }
+
+  #computeOrbitSync(map, w, h, maxIter, options) {
+    switch (options.fn.id) {
+      case FN_MANDELBROT:
+        return Orbit.searchForMandelbrot(map, w, h, maxIter);
+      case FN_JULIA:
+        return Orbit.searchForJulia(map, w, h, maxIter, options.fn.param0);
+      default:
+        return null;
+    }
+  }
+
+  async render(map, options) {
     const gl = this.gl;
     const isWebgl2 = this.version === 2;
     const scale = isWebgl2 ? 1 : WEBGL1_SCALE;
@@ -211,45 +311,39 @@ export class WebglRenderer extends Renderer {
     gl.uniform2f(this.uParam0, fnParam0.x, fnParam0.y);
 
     if (options.deep) {
-      let orbit = undefined;
-      switch (options.fn.id) {
-        case FN_MANDELBROT:
-          orbit = Orbit.searchForMandelbrot(map, w, h, options.maxIter);
-          break;
-        case FN_JULIA:
-          orbit = Orbit.searchForJulia(
-            map,
-            w,
-            h,
-            options.maxIter,
-            options.fn.param0
-          );
-          break;
+      const orbit = await this.#computeOrbit(map, w, h, options.maxIter, options);
+      if (orbit) {
+        gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
+      } else {
+        const center = COMPLEX_PLANE.complex().project(map.center);
+        gl.uniform3f(this.uCenterZoom, center.x, center.y, map.zoom);
       }
-      gl.uniform3f(this.uCenterZoom, orbit.sx, h - orbit.sy, map.zoom);
 
       if (isWebgl2) {
-        const orbitCount = Math.min(
-          orbit.iters.length / 2,
-          WEBGL2_MAX_ITERATIONS
-        );
+        const orbitCount = orbit
+          ? Math.min(orbit.iters.length / 2, WEBGL2_MAX_ITERATIONS)
+          : 0;
         gl.uniform1i(this.uOrbitCount, orbitCount);
 
         const paddedOrbit = new Float32Array(2 * WEBGL2_MAX_ITERATIONS);
-        for (let i = 0; i < orbitCount; i++) {
-          paddedOrbit[i * 2] = orbit.iters[i * 2];
-          paddedOrbit[i * 2 + 1] = orbit.iters[i * 2 + 1];
+        if (orbit) {
+          for (let i = 0; i < orbitCount; i++) {
+            paddedOrbit[i * 2] = orbit.iters[i * 2];
+            paddedOrbit[i * 2 + 1] = orbit.iters[i * 2 + 1];
+          }
         }
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.orbitBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, paddedOrbit, gl.STATIC_DRAW);
         gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.orbitBuffer);
       } else {
-        const orbitCount = orbit.iters.length / 2;
+        const orbitCount = orbit ? orbit.iters.length / 2 : 0;
         const texWidth = 256;
-        const texHeight = Math.ceil((0.5 * orbitCount) / texWidth);
+        const texHeight = Math.max(1, Math.ceil((0.5 * orbitCount) / texWidth));
         const paddedOrbit = new Float32Array(texWidth * texHeight * 4);
-        paddedOrbit.set(orbit.iters);
+        if (orbit) {
+          paddedOrbit.set(orbit.iters);
+        }
 
         const orbitTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
