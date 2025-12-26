@@ -35,6 +35,7 @@ export class WebgpuRenderer extends Renderer {
     this.orbitWorker = undefined;
     this.nextOrbitRequestId = 1;
     this.pendingOrbitRequests = new Map();
+    this.lastFlops = null;
   }
 
   id() {
@@ -357,9 +358,9 @@ export class WebgpuRenderer extends Renderer {
     this.gpuDevice.queue.submit([gpuCommands]);
 
     // Don't await GPU completion here; let the main loop stay smooth.
-    this.gpuDevice.queue.onSubmittedWorkDone().catch(() => {});
+    this.#captureIterations().catch(() => {});
 
-    return new RenderResults(this.id(), options, null);
+    return new RenderResults(this.id(), options, this.lastFlops);
   }
 
   #resetIterationCounter() {
@@ -396,9 +397,16 @@ export class WebgpuRenderer extends Renderer {
     const high = data[1];
 
     readBuffer.unmap();
+    readBuffer.destroy();
 
     const totalIterations = (BigInt(high) << BigInt(32)) | BigInt(low);
     return Number(totalIterations);
+  }
+
+  async #captureIterations() {
+    await this.gpuDevice.queue.onSubmittedWorkDone();
+    const totalIterations = await this.#readIterations();
+    this.lastFlops = totalIterations * FLOP_PER_ITER;
   }
 }
 

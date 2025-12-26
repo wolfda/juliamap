@@ -178,6 +178,7 @@ export class CpuRenderer extends Renderer {
 
     const finalImageData = this.offscreenCtx.createImageData(w, h);
     let finishedWorkers = 0;
+    let totalIterations = 0;
 
     const chunkHeight = Math.ceil(h / this.cpuCount);
     let orbit = null;
@@ -235,9 +236,13 @@ export class CpuRenderer extends Renderer {
             return;
           }
 
-          const { imageDataArray, startY: sy } = e.data;
+          const { imageDataArray, startY: sy, totalIterations: chunkIters } =
+            e.data;
 
           finalImageData.data.set(imageDataArray, sy * w * 4);
+          if (typeof chunkIters === "number") {
+            totalIterations += chunkIters;
+          }
 
           finishedWorkers++;
           worker.terminate();
@@ -249,7 +254,8 @@ export class CpuRenderer extends Renderer {
             this.ctx.drawImage(this.offscreenCanvas, 0, 0);
             this.ctx.restore();
             this.currentWorkers = [];
-            resolve(new RenderResults(this.id(), options));
+            const flops = totalIterations * 6;
+            resolve(new RenderResults(this.id(), options, flops));
           }
         };
 

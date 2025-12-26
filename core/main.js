@@ -89,19 +89,18 @@ function updateStats(renderContext) {
 
 function doUpdateStats(renderContext) {
   let lines = [];
-  lines.push(
-    renderContext.id + (renderContext.options.deep === true ? ".deep" : "")
-  );
+  lines.push(renderContext.id);
 
-  if (renderContext.flops) {
+  const zoom = getCurrentZoom();
+  if (zoom != null) {
+    lines.push("zoom ~" + zoomToOrderOfMagnitude(zoom));
+  }
+
+  if (renderContext.flops != null) {
     lines.push(floatToHumanReadable(renderContext.flops) + " flops");
   }
 
-  if (juliaExplorer) {
-    lines.push(juliaExplorer.fps() + " fps");
-  }
-
-  document.getElementById("flopStats").innerHTML = lines.join("<br/>");
+  document.getElementById("stats").innerHTML = lines.join("<br/>");
 }
 
 function floatToHumanReadable(x) {
@@ -114,6 +113,31 @@ function floatToHumanReadable(x) {
   } else {
     return x;
   }
+}
+
+function getCurrentZoom() {
+  if (!juliaExplorer) {
+    return null;
+  }
+  switch (juliaExplorer.layout) {
+    case Layout.MANDEL:
+      return juliaExplorer.mandelExplorer.map.zoom;
+    case Layout.JULIA:
+      return juliaExplorer.juliaExplorer.map.zoom;
+    case Layout.SPLIT:
+      return Math.max(
+        juliaExplorer.mandelExplorer.map.zoom,
+        juliaExplorer.juliaExplorer.map.zoom
+      );
+    default:
+      return null;
+  }
+}
+
+function zoomToOrderOfMagnitude(zoom) {
+  const log10_2 = Math.log10(2);
+  const exp = Math.max(0, Math.round(zoom * log10_2));
+  return "1e" + exp;
 }
 
 function onViewportChanged() {
