@@ -12,6 +12,10 @@ import {
   zebraColor,
 } from "../core/palette.js";
 
+const MIN_VARIANCE_SAMPLES = 4;
+const DEFAULT_MAX_SUPER_SAMPLES = 64;
+const SUPER_SAMPLE_VARIANCE = 0.0005;
+
 onmessage = function (e) {
   try {
     const {
@@ -23,6 +27,8 @@ onmessage = function (e) {
       startY,
       endY,
       paletteId,
+      paletteInterpolationId,
+      maxSuperSamples,
       maxIter,
       functionId,
       param0,
@@ -38,7 +44,10 @@ onmessage = function (e) {
 
     const centerp = toComplex(center.x, center.y, centerExponent).const();
     const plane = centerp.plane ?? COMPLEX_PLANE;
-    const param0p = plane.complex().project(toComplex(param0.x, param0.y, param0Exponent)).const();
+    const param0p = plane
+      .complex()
+      .project(toComplex(param0.x, param0.y, param0Exponent))
+      .const();
     const z = plane.complex();
     const screenPos = COMPLEX_PLANE.complex();
     const screenPosp = plane.complex();
@@ -46,33 +55,105 @@ onmessage = function (e) {
     const delta = plane.complex();
     const zero = plane.constComplex(0, 0);
     const scaleFactor = (4.0 / width) * Math.pow(2, -zoom);
-    for (screenPos.y = startY; screenPos.y < endY; screenPos.y++) {
-      for (screenPos.x = 0; screenPos.x < width; screenPos.x++) {
-        // Map screenPos -> complex plane; z = center + (screenPos - 0.5 * resolution) * scaleFactor
-        delta
-          .set(screenPosp.project(screenPos))
-          .sub(halfResolution)
-          .mulScalar(scaleFactor, -scaleFactor);
-        z.set(centerp).add(delta);
+    const maxSamples = Math.max(
+      1,
+      Math.floor(maxSuperSamples ?? DEFAULT_MAX_SUPER_SAMPLES)
+    );
 
-        let escapeVelocity;
-        switch (functionId) {
-          case FN_JULIA:
-            escapeVelocity = julia(z, param0p, maxIter);
+    function renderOne(px, py) {
+      screenPos.x = px;
+      screenPos.y = py;
+      // Map screenPos -> complex plane; z = center + (screenPos - 0.5 * resolution) * scaleFactor
+      delta
+        .set(screenPosp.project(screenPos))
+        .sub(halfResolution)
+        .mulScalar(scaleFactor, -scaleFactor);
+      z.set(centerp).add(delta);
+
+      let escapeVelocity;
+      switch (functionId) {
+        case FN_JULIA:
+          escapeVelocity = julia(z, param0p, maxIter);
+          break;
+        case FN_MANDELBROT:
+        default:
+          escapeVelocity = julia(zero, z, maxIter);
+          break;
+      }
+
+      totalIterations += Math.floor(escapeVelocity);
+
+      return getColor(
+        escapeVelocity,
+        maxIter,
+        paletteId,
+        paletteInterpolationId
+      );
+    }
+
+    function renderSuperSample(px, py, maxSamplesLocal) {
+      let meanR = 0;
+      let meanG = 0;
+      let meanB = 0;
+      let m2R = 0;
+      let m2G = 0;
+      let m2B = 0;
+      let sampleCount = 0;
+
+      const minVarianceSamples = Math.min(
+        maxSamplesLocal,
+        MIN_VARIANCE_SAMPLES
+      );
+
+      for (let i = 0; i < maxSamplesLocal; i++) {
+        const jitterX = Math.random() - 0.5;
+        const jitterY = Math.random() - 0.5;
+        const sample = renderOne(px + jitterX, py + jitterY);
+        const sr = sample.r / 255;
+        const sg = sample.g / 255;
+        const sb = sample.b / 255;
+        sampleCount += 1;
+
+        const deltaR = sr - meanR;
+        const deltaG = sg - meanG;
+        const deltaB = sb - meanB;
+        meanR += deltaR / sampleCount;
+        meanG += deltaG / sampleCount;
+        meanB += deltaB / sampleCount;
+        const delta2R = sr - meanR;
+        const delta2G = sg - meanG;
+        const delta2B = sb - meanB;
+        m2R += deltaR * delta2R;
+        m2G += deltaG * delta2G;
+        m2B += deltaB * delta2B;
+
+        if (sampleCount >= minVarianceSamples) {
+          const denom = Math.max(sampleCount - 1, 1);
+          const varianceR = m2R / denom;
+          const varianceG = m2G / denom;
+          const varianceB = m2B / denom;
+          const maxVariance = Math.max(varianceR, varianceG, varianceB);
+          if (maxVariance <= SUPER_SAMPLE_VARIANCE) {
             break;
-          case FN_MANDELBROT:
-          default:
-            escapeVelocity = julia(zero, z, maxIter);
-            break;
+          }
         }
+      }
 
-        totalIterations += Math.floor(escapeVelocity);
+      return {
+        r: Math.min(255, Math.max(0, Math.round(meanR * 255))),
+        g: Math.min(255, Math.max(0, Math.round(meanG * 255))),
+        b: Math.min(255, Math.max(0, Math.round(meanB * 255))),
+      };
+    }
 
-        // Calculate index in this chunk's buffer
-        // row offset: (py - startY)
-        const rowOffset = screenPos.y - startY;
-        const idx = (rowOffset * width + screenPos.x) * 4;
-        const color = getColor(escapeVelocity, maxIter, paletteId);
+    for (let py = startY; py < endY; py++) {
+      for (let px = 0; px < width; px++) {
+        const rowOffset = py - startY;
+        const idx = (rowOffset * width + px) * 4;
+        const color =
+          maxSamples === 1
+            ? renderOne(px, py)
+            : renderSuperSample(px, py, maxSamples);
         imageDataArray[idx + 0] = color.r;
         imageDataArray[idx + 1] = color.g;
         imageDataArray[idx + 2] = color.b;
@@ -93,28 +174,28 @@ onmessage = function (e) {
   }
 };
 
-function getColor(escapeVelocity, maxIter, paletteId) {
+function getColor(escapeVelocity, maxIter, paletteId, paletteInterpolationId) {
   if (escapeVelocity == maxIter) {
     return BLACK;
   }
   switch (paletteId) {
     case ELECTRIC_PALETTE_ID: {
-      return electricColor(escapeVelocity / 100);
+      return electricColor(escapeVelocity / 100, paletteInterpolationId);
     }
     case RAINBOW_PALETTE_ID: {
-      return rainbowColor(escapeVelocity / 150);
+      return rainbowColor(escapeVelocity / 150, paletteInterpolationId);
     }
     case ZEBRA_PALETTE_ID: {
       return zebraColor(escapeVelocity / 5);
     }
     case WIKIPEDIA_PALETTE_ID:
     default: {
-      return wikipediaColor(escapeVelocity / 15 + 0.2);
+      return wikipediaColor(escapeVelocity / 150, paletteInterpolationId);
     }
   }
 }
 
 function toComplex(x, y, exponent) {
-  const plane = exponent ? new BigComplexPlane(exponent) : COMPLEX_PLANE;  
+  const plane = exponent ? new BigComplexPlane(exponent) : COMPLEX_PLANE;
   return plane.complex(x, y);
 }

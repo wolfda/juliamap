@@ -1,6 +1,8 @@
-import { getPaletteId } from "../core/palette.js";
+import { getPaletteId, getPaletteInterpolationId } from "../core/palette.js";
 import { getCpuCount } from "./capabilities.js";
 import { RenderResults, Renderer, RenderingEngine } from "./renderer.js";
+
+const DEFAULT_MAX_SUPER_SAMPLES = 64;
 
 export class CpuRenderer extends Renderer {
   static create(canvas, ctx) {
@@ -79,6 +81,10 @@ export class CpuRenderer extends Renderer {
           break;
         }
 
+        const maxSuperSamples = Math.max(
+          1,
+          Math.floor(options.maxSuperSamples ?? DEFAULT_MAX_SUPER_SAMPLES)
+        );
         const workerData = {
           width: w,
           height: h,
@@ -89,6 +95,10 @@ export class CpuRenderer extends Renderer {
           endY,
           maxIter: options.maxIter,
           paletteId: getPaletteId(options.palette),
+          paletteInterpolationId: getPaletteInterpolationId(
+            options.paletteInterpolation
+          ),
+          maxSuperSamples,
           functionId: options.fn.id,
           param0: options.fn.param0,
           param0Exponent: options.fn.param0.plane?.exponent,
