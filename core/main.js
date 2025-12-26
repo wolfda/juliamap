@@ -164,6 +164,7 @@ async function updateRenderer() {
       deep: appState.deep,
       maxSuperSamples: appState.maxSuperSamples,
     }),
+    onChanged: onViewportChanged,
     onRendered: updateStats,
   });
   juliaExplorer.mandelExplorer.map.moveTo(appState.mcenter, appState.mzoom);

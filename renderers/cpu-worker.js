@@ -162,12 +162,15 @@ onmessage = function (e) {
     }
 
     // Return partial image plus iteration/time info
-    postMessage({
-      startY,
-      endY,
-      imageDataArray,
-      totalIterations,
-    });
+    postMessage(
+      {
+        startY,
+        endY,
+        imageDataArray,
+        totalIterations,
+      },
+      [imageDataArray.buffer]
+    );
   } catch (err) {
     console.error("Error", err);
     postMessage({ error: err.message, stack: err.stack });
