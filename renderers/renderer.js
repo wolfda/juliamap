@@ -33,6 +33,7 @@ export class RenderOptions {
     maxIter,
     palette,
     paletteInterpolation,
+    normalMap,
     fn,
   } = {}) {
     this.maxSuperSamples = maxSuperSamples;
@@ -41,6 +42,7 @@ export class RenderOptions {
     this.palette = palette;
     this.paletteInterpolation =
       paletteInterpolation ?? PaletteInterpolation.SPLINE;
+    this.normalMap = normalMap;
     this.fn = fn;
   }
 }

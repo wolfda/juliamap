@@ -333,7 +333,7 @@ export class WebgpuRenderer extends Renderer {
       true
     ); // paletteInterpolation
     dataView.setUint32(40, options.fn.id, true); // functionId
-    dataView.setUint32(44, 0, true); // padding
+    dataView.setUint32(44, options.normalMap === false ? 0 : 1, true); // useNormalMap
     dataView.setFloat32(48, fnParam0.x, true); // param0
     dataView.setFloat32(52, fnParam0.y, true); // param0
     dataView.setFloat32(56, gpuScale, true); // scale

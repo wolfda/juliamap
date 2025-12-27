@@ -6,6 +6,7 @@ const PALETTES = [
   Palette.ELECTRIC,
   Palette.RAINBOW,
   Palette.ZEBRA,
+  Palette.BLANK,
 ];
 const PALETTE_INTERPOLATIONS = [
   PaletteInterpolation.SPLINE,
@@ -57,6 +58,7 @@ export class AppStateEditor {
 
     this.maxSuperSamplesRange = document.getElementById("maxSuperSamplesRange");
     this.maxSuperSamplesValue = document.getElementById("maxSuperSamplesValue");
+    this.normalMapToggle = document.getElementById("normalMapToggle");
 
     this.layoutSelect = document.getElementById("layoutSelect");
 
@@ -102,6 +104,10 @@ export class AppStateEditor {
       this.#refresh();
     });
 
+    this.normalMapToggle.addEventListener("change", () => {
+      appState.setNormalMap(this.normalMapToggle.checked);
+    });
+
     this.layoutSelect.addEventListener("change", () => {
       appState.setLayout(this.layoutSelect.value);
     });
@@ -117,6 +123,7 @@ export class AppStateEditor {
     this.paletteInterpolationSelect.value =
       appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     this.iterAuto.checked = appState.maxIter === null;
+    this.normalMapToggle.checked = appState.normalMap !== false;
     this.#refresh();
   }
 
@@ -144,6 +151,8 @@ export class AppStateEditor {
     } else if (event.detail === StateAttributes.PALETTE_INTERPOLATION) {
       this.paletteInterpolationSelect.value =
         appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
+    } else if (event.detail === StateAttributes.NORMAL_MAP) {
+      this.normalMapToggle.checked = appState.normalMap !== false;
     }
   }
 

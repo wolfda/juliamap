@@ -28,6 +28,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       maxIter: appState.maxIter,
       deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
+      normalMap: appState.normalMap,
     },
     layout: appState.layout ?? Layout.MANDEL,
     onChanged: onViewportChanged,
@@ -171,6 +172,9 @@ async function onAppStateChanged(event) {
     case StateAttributes.MAX_SUPER_SAMPLES:
       updateMaxSuperSamples();
       break;
+    case StateAttributes.NORMAL_MAP:
+      updateNormalMap();
+      break;
     case StateAttributes.LAYOUT:
       juliaExplorer.setLayout(appState.layout);
       break;
@@ -189,6 +193,7 @@ async function updateRenderer() {
       maxIter: appState.maxIter,
       deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
+      normalMap: appState.normalMap,
     },
     onChanged: onViewportChanged,
     onRendered: updateStats,
@@ -240,6 +245,13 @@ function updateMaxSuperSamples() {
       appState.maxSuperSamples;
     juliaExplorer.mandelExplorer.render(true);
   }
+}
+
+function updateNormalMap() {
+  juliaExplorer.mandelExplorer.options.normalMap = appState.normalMap;
+  juliaExplorer.juliaExplorer.options.normalMap = appState.normalMap;
+  juliaExplorer.mandelExplorer.render(true);
+  juliaExplorer.juliaExplorer.render(true);
 }
 
 function downloadViewport() {

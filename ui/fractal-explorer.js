@@ -443,6 +443,7 @@ export class FractalExplorer {
     const palette = this.options.palette ?? Palette.WIKIPEDIA;
     const paletteInterpolation = this.options.paletteInterpolation;
     const fn = this.options.fn ?? DEFAULT_FN;
+    const normalMap = this.options.normalMap;
     const interactiveMaxSuperSamples = Math.max(
       MIN_SUPER_SAMPLES,
       Math.round(maxSuperSamples * INTERACTIVE_SUPER_SAMPLES_FACTOR)
@@ -455,6 +456,7 @@ export class FractalExplorer {
       maxIter,
       palette,
       paletteInterpolation,
+      normalMap,
       fn,
     };
 

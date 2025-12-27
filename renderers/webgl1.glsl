@@ -50,6 +50,7 @@ const vec3 BLUE = vec3(0, 0, 1);
 const vec3 MAGENTA = vec3(1, 0, 1);
 const vec3 BLACK = vec3(0, 0, 0);
 const vec3 WHITE = vec3(1, 1, 1);
+const vec3 BLANK = vec3(0.82, 0.82, 0.8);
 
 const vec3 ELECTRIC0 = BLUE;
 const vec3 ELECTRIC1 = WHITE;
@@ -92,6 +93,7 @@ vec3 getWikipediaColorAtIndex(int index) {
 #define RAINBOW_PALETTE_ID 1
 #define ZEBRA_PALETTE_ID 2
 #define WIKIPEDIA_PALETTE_ID 3
+#define BLANK_PALETTE_ID 4
 
 #define PALETTE_INTERPOLATION_LINEAR 0
 
@@ -271,6 +273,8 @@ float juliaPerturb(vec2 dz0, vec2 dc) {
 vec3 getColor(float escapeVelocity) {
   if (escapeVelocity >= float(uMaxIter)) {
     return BLACK;
+  } else if (uPaletteId == BLANK_PALETTE_ID) {
+    return BLANK;
   } else if (uPaletteId == ELECTRIC_PALETTE_ID) {
     return electricColor(escapeVelocity);
   } else if (uPaletteId == RAINBOW_PALETTE_ID) {

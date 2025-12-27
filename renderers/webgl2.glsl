@@ -181,12 +181,17 @@ vec3 wikipediaColor(float escapeVelocity) {
 #define RAINBOW_PALETTE_ID 1
 #define ZEBRA_PALETTE_ID 2
 #define WIKIPEDIA_PALETTE_ID 3
+#define BLANK_PALETTE_ID 4
+
+const vec3 BLANK = vec3(0.82, 0.82, 0.8);
 
 vec3 getColor(float escapeVelocity) {
   if (escapeVelocity >= float(uMaxIter)) {
     return BLACK;
   }
   switch (uPaletteId) {
+    case BLANK_PALETTE_ID:
+      return BLANK;
     case ELECTRIC_PALETTE_ID:
       return electricColor(escapeVelocity);
     case RAINBOW_PALETTE_ID:

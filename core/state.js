@@ -28,6 +28,7 @@ export const StateAttributes = {
   PALETTE_INTERPOLATION: "paletteInterpolation",
   MAX_ITER: "maxIter",
   MAX_SUPER_SAMPLES: "maxSuperSamples",
+  NORMAL_MAP: "normalMap",
 };
 
 
@@ -66,6 +67,7 @@ export class AppState extends EventTarget {
     }
     const maxIter = int(params, "iter", null);
     const maxSuperSamples = int(params, "ss", 8);
+    const normalMap = bool(params, "nm", true);
     return new AppState({
       mcenter,
       mzoom,
@@ -78,6 +80,7 @@ export class AppState extends EventTarget {
       maxIter,
       maxSuperSamples,
       deepMode,
+      normalMap,
     });
   }
 
@@ -93,6 +96,7 @@ export class AppState extends EventTarget {
     maxIter,
     maxSuperSamples,
     deepMode,
+    normalMap,
   }) {
     super();
 
@@ -111,6 +115,7 @@ export class AppState extends EventTarget {
     this.paletteInterpolation = paletteInterpolation;
     this.maxIter = maxIter;
     this.maxSuperSamples = maxSuperSamples;
+    this.normalMap = normalMap ?? true;
 
     this.updateURLTimeoutId = null;
   }
@@ -169,6 +174,13 @@ export class AppState extends EventTarget {
     if (this.maxSuperSamples !== maxSuperSamples) {
       this.maxSuperSamples = maxSuperSamples;
       this.#triggerChange(StateAttributes.MAX_SUPER_SAMPLES);
+    }
+  }
+
+  setNormalMap(normalMap) {
+    if (this.normalMap !== normalMap) {
+      this.normalMap = normalMap;
+      this.#triggerChange(StateAttributes.NORMAL_MAP);
     }
   }
 
@@ -232,6 +244,11 @@ export class AppState extends EventTarget {
       } else {
         params.delete("ss");
       }
+      if (this.normalMap === false) {
+        params.set("nm", "0");
+      } else {
+        params.delete("nm");
+      }
       if (this.palette && this.palette !== Palette.WIKIPEDIA) {
         params.set("palette", this.palette);
       } else {
@@ -275,6 +292,20 @@ function renderXYZ(center, zoom) {
 
 function int(params, key, def) {
   return params.has(key) ? parseInt(params.get(key)) ?? def : def;
+}
+
+function bool(params, key, def) {
+  if (!params.has(key)) {
+    return def;
+  }
+  const value = params.get(key);
+  if (value === "0" || value === "false") {
+    return false;
+  }
+  if (value === "1" || value === "true") {
+    return true;
+  }
+  return def;
 }
 
 export const appState = AppState.parseFromAddressBar();

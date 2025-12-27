@@ -8,7 +8,7 @@ struct FractalUniforms {
     paletteId      : u32,
     paletteInterpolation: u32,
     functionId     : u32,
-    _padding0      : u32,
+    useNormalMap   : u32,
     param0         : vec2f,
     scale          : f32,
     perturbScale   : f32,
@@ -30,6 +30,13 @@ var<storage, read_write> iterationCounter: AtomicU64;
 
 const MIN_VARIANCE_SAMPLES: u32 = {{MIN_VARIANCE_SAMPLES}}u;
 const SUPER_SAMPLE_VARIANCE: f32 = {{SUPER_SAMPLE_VARIANCE}};
+const PI: f32 = 3.141592653589793;
+const NORMAL_MAP_LIGHT_ANGLE_DEG: f32 = 45.0;
+const NORMAL_MAP_LIGHT_HEIGHT: f32 = 1.5;
+const NORMAL_MAP_BAILOUT: f32 = 512.0;
+const NORMAL_MAP_BLEND: f32 = 0.65;
+const NORMAL_MAP_MAX_GAIN: f32 = 2.0;
+const FLAT_BASE_COLOR: vec3f = vec3f(0.82, 0.82, 0.8);
 
 // --- Math functions
 
@@ -41,6 +48,28 @@ fn complexSquare(c: vec2f) -> vec2f {
 // Compute c0 x c1 for 2 complex numbers.
 fn complexMul(c0: vec2f, c1: vec2f) -> vec2f {
     return vec2f(c0.x * c1.x - c0.y * c1.y, c0.x * c1.y + c0.y * c1.x);
+}
+
+fn complexConj(c: vec2f) -> vec2f {
+    return vec2f(c.x, -c.y);
+}
+
+fn complexDiv(c0: vec2f, c1: vec2f) -> vec2f {
+    let denom = dot(c1, c1);
+    if (denom == 0.0) {
+        return vec2f(0.0, 0.0);
+    }
+    return complexMul(c0, complexConj(c1)) / denom;
+}
+
+fn complexDivSafe(c0: vec2f, c1: vec2f) -> vec2f {
+    let a0 = max(abs(c0.x), abs(c0.y));
+    let a1 = max(abs(c1.x), abs(c1.y));
+    let scale = max(a0, a1);
+    if (scale == 0.0) {
+        return vec2f(0.0, 0.0);
+    }
+    return complexDiv(c0 / scale, c1 / scale);
 }
 
 // Compute |c|^2, the square of the modulus of a complex number.
@@ -253,12 +282,16 @@ const ELECTRIC_PALETTE_ID = 0u;
 const RAINBOW_PALETTE_ID = 1u;
 const ZEBRA_PALETTE_ID = 2u;
 const WIKIPEDIA_PALETTE_ID = 3u;
+const BLANK_PALETTE_ID = 4u;
 
 fn getColor(escapeVelocity: f32) -> vec3f {
     if (escapeVelocity >= f32(u.maxIter)) {
         return BLACK;
     }
     switch (u.paletteId) {
+        case BLANK_PALETTE_ID: {
+            return FLAT_BASE_COLOR;
+        }
         case ELECTRIC_PALETTE_ID: {
             return electricColor(escapeVelocity);
         }
@@ -342,33 +375,140 @@ fn juliaPerturb(dz0_hat: vec2f, dc_hat: vec2f, maxIter: u32) -> f32 {
 }
 
 // --- Rendering functions
-
-fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
+fn computeEscapeVelocity(fragCoord: vec2f, scaleFactor: vec2f) -> f32 {
     let maxIter = u.maxIter;
-    var escapeVelocity = 0.0;
     if u.usePerturbation == 0 {
         let pos = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
         switch (u.functionId) {
             case FN_JULIA: {
-                escapeVelocity = julia(pos, u.param0, maxIter);
+                return julia(pos, u.param0, maxIter);
             }
             case FN_MANDELBROT, default: {
-                escapeVelocity = julia(vec2f(0), pos, maxIter);
+                return julia(vec2f(0), pos, maxIter);
             }
         }
     } else {
         let delta = (fragCoord - u.center) * scaleFactor;
         switch (u.functionId) {
             case FN_JULIA: {
-                escapeVelocity = juliaPerturb(delta, vec2f(0), maxIter);
+                return juliaPerturb(delta, vec2f(0), maxIter);
             }
             case FN_MANDELBROT, default: {
-                escapeVelocity = juliaPerturb(vec2f(0), delta, maxIter);
+                return juliaPerturb(vec2f(0), delta, maxIter);
             }
         }
     }
 
-    return getColor(escapeVelocity);
+    return f32(maxIter);
+}
+
+struct NormalSample {
+    escapeVelocity: f32,
+    normal2d: vec2f,
+    escaped: bool,
+};
+
+fn computeNormalSample(fragCoord: vec2f, scaleFactor: vec2f) -> NormalSample {
+    let maxIter = u.maxIter;
+    if (u.usePerturbation == 1u && u.functionId == FN_MANDELBROT) {
+        let delta = (fragCoord - u.center) * scaleFactor;
+        let dc_hat = delta;
+        var dz_hat = vec2f(0.0);
+        var der = vec2f(0.0);
+        var z = referenceOrbit[0];
+        let s = u.perturbScale;
+
+        for (var i = 0u; i < maxIter; i += 1u) {
+            let wPrev = z + s * dz_hat;
+            let derNext = 2.0 * complexMul(wPrev, der) + vec2f(1.0, 0.0);
+            dz_hat = complexMul(2.0 * z + s * dz_hat, dz_hat) + dc_hat;
+            let zNext = referenceOrbit[i + 1u];
+            let wNext = zNext + s * dz_hat;
+
+            let squareMod = complexSquareMod(wNext);
+            if (squareMod > NORMAL_MAP_BAILOUT * NORMAL_MAP_BAILOUT) {
+                incrementIterations(i);
+                let escapeVelocity = smoothEscapeVelocity(i, squareMod);
+                var uDir = complexDivSafe(wNext, derNext);
+                if (dot(uDir, uDir) > 0.0) {
+                    uDir = normalize(uDir);
+                } else {
+                    uDir = vec2f(0.0);
+                }
+                return NormalSample(escapeVelocity, uDir, true);
+            }
+
+            z = zNext;
+            der = derNext;
+        }
+
+        incrementIterations(maxIter);
+        return NormalSample(f32(maxIter), vec2f(0.0), false);
+    }
+
+    if (u.usePerturbation == 1u) {
+        return NormalSample(computeEscapeVelocity(fragCoord, scaleFactor), vec2f(0.0), false);
+    }
+
+    var z: vec2f;
+    var c: vec2f;
+    var der: vec2f = vec2f(1.0, 0.0);
+
+    if (u.functionId == FN_JULIA) {
+        z = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
+        c = u.param0;
+    } else {
+        c = u.center + (fragCoord - 0.5 * u.resolution) * scaleFactor;
+        z = c;
+    }
+
+    for (var i = 0u; i < maxIter; i += 1u) {
+        let newZ = complexSquare(z) + c;
+        var newDer = 2.0 * complexMul(z, der);
+        if (u.functionId == FN_MANDELBROT) {
+            newDer += vec2f(1.0, 0.0);
+        }
+        z = newZ;
+        der = newDer;
+        let squareMod = complexSquareMod(z);
+        if (squareMod > NORMAL_MAP_BAILOUT * NORMAL_MAP_BAILOUT) {
+            incrementIterations(i);
+            let escapeVelocity = smoothEscapeVelocity(i, squareMod);
+            var uDir = complexDivSafe(z, der);
+            if (dot(uDir, uDir) > 0.0) {
+                uDir = normalize(uDir);
+            } else {
+                uDir = vec2f(0.0);
+            }
+            return NormalSample(escapeVelocity, uDir, true);
+        }
+    }
+
+    incrementIterations(maxIter);
+    return NormalSample(f32(maxIter), vec2f(0.0), false);
+}
+
+fn shadeWithNormalMap(baseColor: vec3f, sample: NormalSample) -> vec3f {
+    if (!sample.escaped) {
+        return baseColor;
+    }
+    let angle = NORMAL_MAP_LIGHT_ANGLE_DEG * PI / 180.0;
+    let light2d = normalize(vec2f(cos(angle), sin(angle)));
+    var t = (dot(sample.normal2d, light2d) + NORMAL_MAP_LIGHT_HEIGHT) / (1.0 + NORMAL_MAP_LIGHT_HEIGHT);
+    t = clamp(t, 0.0, 1.0);
+    let avg = NORMAL_MAP_LIGHT_HEIGHT / (1.0 + NORMAL_MAP_LIGHT_HEIGHT);
+    let gain = clamp(t / max(avg, 1e-4), 0.0, NORMAL_MAP_MAX_GAIN);
+    let lit = baseColor * gain;
+    return mix(baseColor, lit, NORMAL_MAP_BLEND);
+}
+
+fn renderOne(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
+    if (u.useNormalMap == 0u) {
+        return getColor(computeEscapeVelocity(fragCoord, scaleFactor));
+    }
+    let sample = computeNormalSample(fragCoord, scaleFactor);
+    let baseColor = getColor(sample.escapeVelocity);
+    return shadeWithNormalMap(baseColor, sample);
 }
 
 fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {

@@ -2,6 +2,8 @@ import { julia, FN_JULIA, FN_MANDELBROT } from "../math/julia.js";
 import { BigComplexPlane, COMPLEX_PLANE } from "../math/complex.js";
 import {
   BLACK,
+  GRAY,
+  BLANK_PALETTE_ID,
   ELECTRIC_PALETTE_ID,
   electricColor,
   RAINBOW_PALETTE_ID,
@@ -262,6 +264,9 @@ function getColor(escapeVelocity, maxIter, paletteId, paletteInterpolationId) {
     return BLACK;
   }
   switch (paletteId) {
+    case BLANK_PALETTE_ID: {
+      return GRAY;
+    }
     case ELECTRIC_PALETTE_ID: {
       return electricColor(escapeVelocity / 100, paletteInterpolationId);
     }

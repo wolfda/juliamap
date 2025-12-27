@@ -3,6 +3,7 @@ export const Palette = {
   RAINBOW: "rainbow",
   ZEBRA: "zebra",
   WIKIPEDIA: "wikipedia",
+  BLANK: "blank",
 };
 
 export const PaletteInterpolation = {
@@ -14,6 +15,7 @@ export const ELECTRIC_PALETTE_ID = 0;
 export const RAINBOW_PALETTE_ID = 1;
 export const ZEBRA_PALETTE_ID = 2;
 export const WIKIPEDIA_PALETTE_ID = 3;
+export const BLANK_PALETTE_ID = 4;
 
 export const LINEAR_PALETTE_INTERPOLATION_ID = 0;
 export const SPLINE_PALETTE_INTERPOLATION_ID = 1;
@@ -27,6 +29,9 @@ export function getPaletteId(palette) {
     case Palette.ZEBRA:
       return ZEBRA_PALETTE_ID;
     case Palette.WIKIPEDIA:
+      return WIKIPEDIA_PALETTE_ID;
+    case Palette.BLANK:
+      return BLANK_PALETTE_ID;
     default:
       return WIKIPEDIA_PALETTE_ID;
   }
@@ -58,6 +63,7 @@ export const BLUE = new Color(0, 0, 255);
 export const MAGENTA = new Color(255, 0, 255);
 export const BLACK = new Color(0, 0, 0);
 export const WHITE = new Color(255, 255, 255);
+export const GRAY = new Color(210, 210, 210);
 
 const ELECTRIC = [BLUE, WHITE];
 const RAINBOW = [YELLOW, GREEN, CYAN, BLUE, MAGENTA, RED];
