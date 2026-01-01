@@ -398,8 +398,6 @@ fn computeEscapeVelocity(fragCoord: vec2f, scaleFactor: vec2f) -> f32 {
             }
         }
     }
-
-    return f32(maxIter);
 }
 
 struct NormalSample {
