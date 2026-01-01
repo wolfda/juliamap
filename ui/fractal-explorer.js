@@ -39,6 +39,8 @@ export class FractalExplorer {
     this.renderCtx = null;
     this.latestFrameCanvas = document.createElement("canvas");
     this.latestFrameCtx = this.latestFrameCanvas.getContext("2d");
+    this.previewCanvas = document.createElement("canvas");
+    this.previewCtx = this.previewCanvas.getContext("2d");
     this.lastRenderState = null;
     this.pendingRenderQueue = [];
     this.renderLoopPromise = null;
@@ -81,6 +83,16 @@ export class FractalExplorer {
     this.latestFrameCtx.imageSmoothingEnabled = false;
     this.latestFrameCtx.imageSmoothingQuality = "low";
     this.latestFrameCanvas.style.imageRendering = "pixelated";
+    this.previewCanvas.style.position = "absolute";
+    this.previewCanvas.style.left = "0";
+    this.previewCanvas.style.top = "0";
+    this.previewCanvas.style.width = "100%";
+    this.previewCanvas.style.height = "100%";
+    this.previewCanvas.style.pointerEvents = "none";
+    this.previewCanvas.style.imageRendering = "pixelated";
+    this.previewCanvas.style.display = "none";
+    this.previewCtx.imageSmoothingEnabled = false;
+    this.previewCtx.imageSmoothingQuality = "low";
 
     this.#startPreviewLoop();
   }
@@ -352,6 +364,7 @@ export class FractalExplorer {
       return;
     }
     this.divContainer.appendChild(this.canvas);
+    this.divContainer.appendChild(this.previewCanvas);
     this.render(true);
     this.isAttached = true;
   }
@@ -361,6 +374,7 @@ export class FractalExplorer {
       return;
     }
     this.divContainer.removeChild(this.canvas);
+    this.divContainer.removeChild(this.previewCanvas);
     this.isAttached = false;
   }
 
@@ -417,6 +431,8 @@ export class FractalExplorer {
     this.renderCanvas.height = height * DPR;
     this.latestFrameCanvas.width = width * DPR;
     this.latestFrameCanvas.height = height * DPR;
+    this.previewCanvas.width = width * DPR;
+    this.previewCanvas.height = height * DPR;
     if (this.renderer) {
       this.renderer.resize(width * DPR, height * DPR);
       await this.render(true);
@@ -531,12 +547,6 @@ export class FractalExplorer {
 
   #captureLatestFrame() {
     if (
-      this.renderer?.id() === RenderingEngine.WEBGPU ||
-      this.renderer?.id() === RenderingEngine.WEBGL2
-    ) {
-      return;
-    }
-    if (
       this.latestFrameCanvas.width !== this.renderCanvas.width ||
       this.latestFrameCanvas.height !== this.renderCanvas.height
     ) {
@@ -590,6 +600,7 @@ export class FractalExplorer {
     ) {
       this.canvas.style.transformOrigin = "0 0";
       this.canvas.style.transform = "translate(0px, 0px) scale(1)";
+      this.previewCanvas.style.display = "none";
     }
   }
 
@@ -628,11 +639,33 @@ export class FractalExplorer {
       this.renderer?.id() === RenderingEngine.WEBGPU ||
       this.renderer?.id() === RenderingEngine.WEBGL2
     ) {
-      // For WebGPU/WebGL2 we can't repaint via 2D; use a CSS transform to preview.
+      // For WebGPU/WebGL2, draw a preview overlay so edges fall back to the
+      // previous frame instead of the page background.
+      const sourceCanvas =
+        this.latestFrameCanvas.width > 0
+          ? this.latestFrameCanvas
+          : this.renderCanvas;
+      const pw = this.previewCanvas.width;
+      const ph = this.previewCanvas.height;
+      this.previewCtx.setTransform(1, 0, 0, 1, 0, 0);
+      this.previewCtx.clearRect(0, 0, pw, ph);
+      this.previewCtx.setTransform(scale, 0, 0, scale, tx, ty);
+      this.previewCtx.imageSmoothingEnabled = false;
+      this.previewCtx.drawImage(
+        sourceCanvas,
+        0,
+        0,
+        sourceCanvas.width,
+        sourceCanvas.height,
+        0,
+        0,
+        w,
+        h
+      );
+      this.previewCtx.setTransform(1, 0, 0, 1, 0, 0);
       this.canvas.style.transformOrigin = "0 0";
-      const cssTx = tx / DPR;
-      const cssTy = ty / DPR;
-      this.canvas.style.transform = `translate(${cssTx}px, ${cssTy}px) scale(${scale})`;
+      this.canvas.style.transform = "translate(0px, 0px) scale(1)";
+      this.previewCanvas.style.display = "block";
       return;
     }
 
