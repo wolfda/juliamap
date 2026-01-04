@@ -59,6 +59,7 @@ export class AppStateEditor {
     this.maxSuperSamplesRange = document.getElementById("maxSuperSamplesRange");
     this.maxSuperSamplesValue = document.getElementById("maxSuperSamplesValue");
     this.normalMapToggle = document.getElementById("normalMapToggle");
+    this.orbitOverlayToggle = document.getElementById("orbitOverlayToggle");
 
     this.layoutSelect = document.getElementById("layoutSelect");
 
@@ -108,6 +109,10 @@ export class AppStateEditor {
       appState.setNormalMap(this.normalMapToggle.checked);
     });
 
+    this.orbitOverlayToggle.addEventListener("change", () => {
+      appState.setOrbitOverlay(this.orbitOverlayToggle.checked);
+    });
+
     this.layoutSelect.addEventListener("change", () => {
       appState.setLayout(this.layoutSelect.value);
     });
@@ -124,6 +129,7 @@ export class AppStateEditor {
       appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     this.iterAuto.checked = appState.maxIter === null;
     this.normalMapToggle.checked = appState.normalMap !== false;
+    this.orbitOverlayToggle.checked = appState.orbitOverlay !== false;
     this.#refresh();
   }
 
@@ -153,6 +159,8 @@ export class AppStateEditor {
         appState.paletteInterpolation ?? PaletteInterpolation.SPLINE;
     } else if (event.detail === StateAttributes.NORMAL_MAP) {
       this.normalMapToggle.checked = appState.normalMap !== false;
+    } else if (event.detail === StateAttributes.ORBIT_OVERLAY) {
+      this.orbitOverlayToggle.checked = appState.orbitOverlay !== false;
     }
   }
 

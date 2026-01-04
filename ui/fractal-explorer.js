@@ -5,6 +5,7 @@ import { Palette } from "../core/palette.js";
 import { DeepMode } from "../core/state.js";
 import { RenderingEngine, RenderOptions } from "../renderers/renderer.js";
 import { createRenderer } from "../renderers/renderers.js";
+import { MarkerOverlay } from "./marker-overlay.js";
 
 export const DPR = window.devicePixelRatio ?? 1;
 const RENDER_INTERVAL_MS = 33; // target ~30 fps preview
@@ -94,6 +95,13 @@ export class FractalExplorer {
     this.previewCtx.imageSmoothingEnabled = false;
     this.previewCtx.imageSmoothingQuality = "low";
 
+    this.markerOverlay = new MarkerOverlay(this.map, this.canvas, DPR);
+    this.lastOrbitMarker = null;
+    this.showOrbitOverlay = options?.showOrbitOverlay !== false;
+    if (!this.showOrbitOverlay) {
+      this.markerOverlay.element.style.display = "none";
+    }
+
     this.#startPreviewLoop();
   }
 
@@ -138,6 +146,23 @@ export class FractalExplorer {
         ? MIN_SUPER_SAMPLES
         : DEFAULT_SUPER_SAMPLES;
     this.options.maxSuperSamples ??= fallbackMaxSamples;
+  }
+
+  setOrbitOverlay(show) {
+    this.showOrbitOverlay = show !== false;
+    this.markerOverlay.element.style.display = this.showOrbitOverlay
+      ? "block"
+      : "none";
+    if (!this.showOrbitOverlay) {
+      this.markerOverlay.clear();
+    } else if (this.lastOrbitMarker) {
+      this.markerOverlay.setMarker("orbit", {
+        point: this.lastOrbitMarker.point,
+        color: this.lastOrbitMarker.inSet ? "#00ff00" : "#ff0000",
+        radius: 4,
+      });
+      this.markerOverlay.update();
+    }
   }
 
   #onMouseDown(e) {
@@ -365,6 +390,7 @@ export class FractalExplorer {
     }
     this.divContainer.appendChild(this.canvas);
     this.divContainer.appendChild(this.previewCanvas);
+    this.divContainer.appendChild(this.markerOverlay.element);
     this.render(true);
     this.isAttached = true;
   }
@@ -375,6 +401,7 @@ export class FractalExplorer {
     }
     this.divContainer.removeChild(this.canvas);
     this.divContainer.removeChild(this.previewCanvas);
+    this.divContainer.removeChild(this.markerOverlay.element);
     this.isAttached = false;
   }
 
@@ -528,6 +555,7 @@ export class FractalExplorer {
       this.lastRenderState = renderState;
       this.#captureLatestFrame();
       this.#presentFrame();
+      this.#updateOrbitMarker(renderResult);
       this.onRendered?.(renderResult);
 
       this.fpsMonitor.addFrame(end - start);
@@ -604,10 +632,32 @@ export class FractalExplorer {
     }
   }
 
+  #updateOrbitMarker(renderResult) {
+    if (!this.showOrbitOverlay) {
+      this.markerOverlay.removeMarker("orbit");
+      return;
+    }
+    const marker = renderResult?.orbitMarker;
+    this.lastOrbitMarker = marker ?? null;
+    if (!marker) {
+      this.markerOverlay.removeMarker("orbit");
+      return;
+    }
+    this.markerOverlay.setMarker("orbit", {
+      point: marker.point,
+      color: marker.inSet ? "#00ff00" : "#ff0000",
+      radius: 4,
+    });
+    this.markerOverlay.update();
+  }
+
   #startPreviewLoop() {
     const tick = () => {
       if (this.isAttached && this.lastRenderState) {
         this.#drawPreviewFromLastRender();
+        if (this.showOrbitOverlay) {
+          this.markerOverlay.update();
+        }
       }
       this.previewLoopId = requestAnimationFrame(tick);
     };

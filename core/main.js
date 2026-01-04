@@ -29,6 +29,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
       normalMap: appState.normalMap,
+      showOrbitOverlay: appState.orbitOverlay,
     },
     layout: appState.layout ?? Layout.MANDEL,
     onChanged: onViewportChanged,
@@ -175,6 +176,9 @@ async function onAppStateChanged(event) {
     case StateAttributes.NORMAL_MAP:
       updateNormalMap();
       break;
+    case StateAttributes.ORBIT_OVERLAY:
+      updateOrbitOverlay();
+      break;
     case StateAttributes.LAYOUT:
       juliaExplorer.setLayout(appState.layout);
       break;
@@ -194,6 +198,7 @@ async function updateRenderer() {
       deepMode: appState.deepMode,
       maxSuperSamples: appState.maxSuperSamples,
       normalMap: appState.normalMap,
+      showOrbitOverlay: appState.orbitOverlay,
     },
     onChanged: onViewportChanged,
     onRendered: updateStats,
@@ -252,6 +257,15 @@ function updateNormalMap() {
   juliaExplorer.juliaExplorer.options.normalMap = appState.normalMap;
   juliaExplorer.mandelExplorer.render(true);
   juliaExplorer.juliaExplorer.render(true);
+}
+
+function updateOrbitOverlay() {
+  juliaExplorer.mandelExplorer.options.showOrbitOverlay =
+    appState.orbitOverlay;
+  juliaExplorer.juliaExplorer.options.showOrbitOverlay =
+    appState.orbitOverlay;
+  juliaExplorer.mandelExplorer.setOrbitOverlay(appState.orbitOverlay);
+  juliaExplorer.juliaExplorer.setOrbitOverlay(appState.orbitOverlay);
 }
 
 function downloadViewport() {

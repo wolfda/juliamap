@@ -79,6 +79,23 @@ export class MapControl {
   }
 
   /**
+   * Convert complex plane coords to screen coords.
+   */
+  complexToScreen(point, width, height) {
+    const plane = this.plane ?? COMPLEX_PLANE;
+    const delta = plane.complex().project(point);
+    delta.sub(this.center);
+    const scale = plane.pow2Scalar(-this.zoom);
+    delta.divScalar(scale);
+    const dx = plane.asNumber(delta.x);
+    const dy = plane.asNumber(delta.y);
+    return {
+      sx: width * 0.5 + dx * (width / 4),
+      sy: height * 0.5 - dy * (width / 4),
+    };
+  }
+
+  /**
    * Move the map by delta in fractal coords.
    * Velocity is computed automatically from the time between calls.
    *

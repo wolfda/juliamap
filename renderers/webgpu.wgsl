@@ -12,6 +12,7 @@ struct FractalUniforms {
     param0         : vec2f,
     scale          : f32,
     perturbScale   : f32,
+    usePrecomputed : u32,
 };
 
 struct AtomicU64 {
@@ -27,6 +28,12 @@ var<storage, read> referenceOrbit: array<vec2f, {{MAX_ITERATIONS}}>;
 
 @group(0) @binding(2)
 var<storage, read_write> iterationCounter: AtomicU64;
+
+@group(0) @binding(3)
+var outputTexture: texture_storage_2d<rgba8unorm, write>;
+
+@group(0) @binding(4)
+var inputTexture: texture_2d<f32>;
 
 const MIN_VARIANCE_SAMPLES: u32 = {{MIN_VARIANCE_SAMPLES}}u;
 const SUPER_SAMPLE_VARIANCE: f32 = {{SUPER_SAMPLE_VARIANCE}};
@@ -542,6 +549,11 @@ fn renderSuperSample(fragCoord: vec2f, scaleFactor: vec2f) -> vec3f {
 
 @fragment
 fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
+    if (u.usePrecomputed == 1u) {
+        let pixel = vec2i(fragCoord.xy);
+        return textureLoad(inputTexture, pixel, 0);
+    }
+
     // Per-pixel scale in the complex plane (already rescaled on the CPU).
     let scaleFactor = u.scale * vec2f(1.0, -1.0);
 
@@ -550,4 +562,26 @@ fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
     } else {
         return vec4f(renderSuperSample(fragCoord.xy, scaleFactor), 1.0);
     }
+}
+
+@compute @workgroup_size(16, 16)
+fn computeMain(@builtin(global_invocation_id) gid: vec3u) {
+    let width = u32(u.resolution.x);
+    let height = u32(u.resolution.y);
+    if (gid.x >= width || gid.y >= height) {
+        return;
+    }
+
+    // Match fragment @builtin(position) pixel-center coordinates.
+    let fragCoord = vec2f(f32(gid.x) + 0.5, f32(gid.y) + 0.5);
+    let scaleFactor = u.scale * vec2f(1.0, -1.0);
+
+    var color = vec3f(0.0);
+    if (u.maxSamples == 1u) {
+        color = renderOne(fragCoord, scaleFactor);
+    } else {
+        color = renderSuperSample(fragCoord, scaleFactor);
+    }
+
+    textureStore(outputTexture, vec2i(gid.xy), vec4f(color, 1.0));
 }

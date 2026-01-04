@@ -29,6 +29,7 @@ export const StateAttributes = {
   MAX_ITER: "maxIter",
   MAX_SUPER_SAMPLES: "maxSuperSamples",
   NORMAL_MAP: "normalMap",
+  ORBIT_OVERLAY: "orbitOverlay",
 };
 
 
@@ -68,6 +69,7 @@ export class AppState extends EventTarget {
     const maxIter = int(params, "iter", null);
     const maxSuperSamples = int(params, "ss", 8);
     const normalMap = bool(params, "nm", true);
+    const orbitOverlay = bool(params, "om", false);
     return new AppState({
       mcenter,
       mzoom,
@@ -81,6 +83,7 @@ export class AppState extends EventTarget {
       maxSuperSamples,
       deepMode,
       normalMap,
+      orbitOverlay,
     });
   }
 
@@ -97,6 +100,7 @@ export class AppState extends EventTarget {
     maxSuperSamples,
     deepMode,
     normalMap,
+    orbitOverlay,
   }) {
     super();
 
@@ -116,6 +120,7 @@ export class AppState extends EventTarget {
     this.maxIter = maxIter;
     this.maxSuperSamples = maxSuperSamples;
     this.normalMap = normalMap ?? true;
+    this.orbitOverlay = orbitOverlay ?? false;
 
     this.updateURLTimeoutId = null;
   }
@@ -184,6 +189,13 @@ export class AppState extends EventTarget {
     }
   }
 
+  setOrbitOverlay(orbitOverlay) {
+    if (this.orbitOverlay !== orbitOverlay) {
+      this.orbitOverlay = orbitOverlay;
+      this.#triggerChange(StateAttributes.ORBIT_OVERLAY);
+    }
+  }
+
   getDefaultMaxIter() {
     return Math.round(200 * (1 + this.mzoom));
   }
@@ -248,6 +260,11 @@ export class AppState extends EventTarget {
         params.set("nm", "0");
       } else {
         params.delete("nm");
+      }
+      if (this.orbitOverlay === true) {
+        params.set("om", "1");
+      } else {
+        params.delete("om");
       }
       if (this.palette && this.palette !== Palette.WIKIPEDIA) {
         params.set("palette", this.palette);
