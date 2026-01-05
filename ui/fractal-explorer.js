@@ -540,10 +540,11 @@ export class FractalExplorer {
     while (this.pendingRenderQueue.length > 0 && this.isAttached) {
       const { requestId, options, resolve } = this.pendingRenderQueue.shift();
       const renderState = this.#snapshotMapState();
+      const renderMap = this.map.snapshot();
 
       const start = performance.now();
       this.inFlightRenderStartTime = start;
-      this.inFlightRenderPromise = this.renderer.render(this.map, options);
+      this.inFlightRenderPromise = this.renderer.render(renderMap, options);
       const renderResult = await this.inFlightRenderPromise;
       this.inFlightRenderPromise = null;
       this.inFlightRenderStartTime = null;
@@ -672,16 +673,20 @@ export class FractalExplorer {
     const currentPlane = this.map.plane;
     const lastCenter = currentPlane.complex().project(this.lastRenderState.center);
     const currentCenter = currentPlane.complex().project(this.map.center);
-    const dx = currentPlane.asNumber(lastCenter.x - currentCenter.x);
-    const dy = currentPlane.asNumber(lastCenter.y - currentCenter.y);
     const w = this.canvas.width;
     const h = this.canvas.height;
 
     const zoomDelta = this.map.zoom - this.lastRenderState.zoom;
     const scale = Math.pow(2, zoomDelta);
-    const pixelScale = (w / 4) * Math.pow(2, this.map.zoom);
-    const targetX = w * 0.5 + dx * pixelScale;
-    const targetY = h * 0.5 - dy * pixelScale;
+    const delta = currentPlane.complex().set(lastCenter).sub(currentCenter);
+    const pixelScale = currentPlane.scalar(w / 4);
+    const zoomScale = currentPlane.pow2Scalar(this.map.zoom);
+    delta.mulScalar(pixelScale);
+    delta.mulScalar(zoomScale);
+    const dxPixels = currentPlane.asNumber(delta.x);
+    const dyPixels = currentPlane.asNumber(delta.y);
+    const targetX = w * 0.5 + dxPixels;
+    const targetY = h * 0.5 - dyPixels;
     const tx = targetX - scale * w * 0.5;
     const ty = targetY - scale * h * 0.5;
 

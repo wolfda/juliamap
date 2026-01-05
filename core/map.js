@@ -50,6 +50,13 @@ export class MapControl {
     this.vz = 0;
   }
 
+  snapshot() {
+    const snap = new MapControl();
+    snap.moveTo(this.center.clone(), this.zoom);
+    snap.plane = this.plane;
+    return snap;
+  }
+
   /**
    * Stop any ongoing inertia and set velocities to 0.
    * Can be called if you don't want inertia to continue
